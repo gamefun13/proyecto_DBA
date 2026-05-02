@@ -1,0 +1,142 @@
+\documentclass{article}
+
+% Language setting
+\usepackage[spanish]{babel}
+
+% Set page size and margins
+\usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+\usepackage{attachfile}
+\usepackage{hyperref}
+\usepackage{pdfpages}
+% Useful packages
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{float} %
+
+\title{Proyecto Final DBA}
+\author{Daniel Gonzalez, Eduardo De Brigard, Juan Pablo Hernandez}
+
+\begin{document}
+\maketitle
+
+\section{Introducción}
+
+En el marco de la transición energética impulsada por la Unidad de Planeación Minero Energética (UPME), surge la necesidad de identificar zonas estratégicas para el despliegue de infraestructura de energía renovable en Colombia. Este proyecto se enfoca específicamente en evaluar el potencial de generación solar en los techos de edificaciones dentro de los territorios priorizados por los Programas de Desarrollo con Enfoque Territorial (PDET), buscando promover la equidad territorial y el desarrollo en regiones históricamente vulnerables.  El principal desafío técnico radica en el procesamiento masivo de datos. Para estimar el área disponible para paneles solares, es necesario integrar y comparar datasets globales que contienen miles de millones de registros de huellas de edificios (como Google Open Buildings y Microsoft Building Footprints), junto con la delimitación administrativa del DANE.  Dada la escala de la información y la naturaleza geográfica de los datos, este documento presenta una propuesta basada en tecnologías NoSQL, específicamente utilizando MongoDB. El uso de este paradigma permite una gestión flexible de esquemas y, sobre todo, una ejecución eficiente de operaciones espaciales complejas, fundamentales para cruzar los límites municipales con las estructuras detectadas por satélite.
+
+
+\section{Diseño del esquema de base de datos NoSQL y plan de implementación}
+
+ \subsection{Plan de Implementación}
+
+\begin{enumerate}
+    \item \textbf{Preparación de la Infraestructura NoSQL}
+    \begin{itemize}
+        \item Despliegue de MongoDB: Configuración de una instancia de base de datos orientada a documentos para el almacenamiento masivo de datos vectoriales.
+        \item Indexación Espacial: Implementación de índices de tipo \texttt{2dsphere} para optimizar las consultas de proximidad y contención geográfica.
+    \end{itemize}
+
+    \item \textbf{Adquisición e Integración de Datos Territoriales}
+    \begin{itemize}
+        \item Filtro PDET: Procesamiento del Marco Geoestadístico Nacional (MGN) del DANE para extraer y limpiar los límites de los municipios priorizados como territorios PDET.
+        \item Ingesta de Huellas de Edificios: Carga y normalización de al menos dos de los datasets globales (Microsoft Building Footprints y Google Open Buildings) en la base de datos NoSQL.
+    \end{itemize}
+
+    \item \textbf{Procesamiento y Análisis Geoespacial}
+    \begin{itemize}
+        \item Intersección Espacial: Ejecución de operaciones de filtrado para identificar exclusivamente las estructuras ubicadas dentro de los polígonos municipales PDET.
+        \item Cálculo de Áreas: Estimación de la superficie de los techos y conteo total de edificaciones por cada jurisdicción seleccionada.
+    \end{itemize}
+
+    \item \textbf{Evaluación y Comparativa de Fuentes}
+    \begin{itemize}
+        \item Auditoría de Datos (EDA): Realización de un análisis exploratorio para comparar la precisión y el volumen de detecciones entre los datasets seleccionados.
+        \item Verificación de Integridad: Validación de los formatos y la consistencia de los datos integrados en el esquema NoSQL.
+    \end{itemize}
+
+    \item \textbf{Consolidación de Resultados}
+    \begin{itemize}
+        \item Generación de Reportes: Creación de visualizaciones cartográficas y tablas de resumen que identifiquen los municipios con mayor potencial para granjas solares.
+        \item Documentación de Recomendaciones: Redacción de hallazgos técnicos alineados con los objetivos de transición energética y equidad territorial de la UPME.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Modelo de Datos Inicial}
+
+Dado que el proyecto requiere una solución NoSQL, el modelado se centra en la estructura de documentos JSON (BSON) y en la optimización de consultas geoespaciales. A continuación, se definen las dos entidades principales y su interacción lógica:
+
+\subsubsection{A. Representación del Modelo (Estructura de Documentos)}
+
+\textbf{Colección: territorios\_pdet}
+\begin{itemize}
+    \item \texttt{\_id}: Identificador único (ObjectId)
+    \item \texttt{codigo\_mgn}: Código municipal del DANE
+    \item \texttt{nombre\_municipio}: Nombre oficial
+    \item \texttt{geometria\_pdet}: Objeto GeoJSON (MultiPolygon) que define los límites del municipio
+    \item \texttt{datos\_pdet}: Información sobre el programa de desarrollo
+\end{itemize}
+
+\textbf{Colección: huellas\_edificios}
+\begin{itemize}
+    \item \texttt{\_id}: Identificador único (ObjectId)
+    \item \texttt{fuente}: Origen del dato (Microsoft o Google)
+    \item \texttt{geometria\_edificio}: Objeto GeoJSON (Polygon) con la huella del edificio
+    \item \texttt{area\_estimada\_m2}: Valor numérico calculado para el potencial solar
+    \item \texttt{metadata}: Confianza de detección y fecha de captura
+\end{itemize}
+
+\subsubsection{B. Instrumento de Modelado: Relación Espacial}
+
+En este modelo, la relación no se define mediante claves foráneas como en bases de datos relacionales, sino mediante una lógica de contención espacial:
+
+\begin{itemize}
+    \item \textbf{Vínculo lógico}: Un documento en \texttt{huellas\_edificios} pertenece a un territorio en \texttt{territorios\_pdet} si su \texttt{geometria\_edificio} está contenida dentro de \texttt{geometria\_pdet}.
+    
+    \item \textbf{Mecanismo de consulta}: Se utilizará el operador \texttt{\$geoWithin} de MongoDB para realizar el cruce de datos en tiempo de ejecución, evitando redundancia innecesaria.
+\end{itemize}
+
+\subsection{Esquema de Datos y Justificación}
+
+Para cumplir con el requerimiento de una solución escalable y eficiente en operaciones espaciales, se ha diseñado un esquema basado en dos colecciones principales dentro de MongoDB.
+
+\subsubsection{Descripción de las Colecciones}
+
+\textbf{Colección: pdet\_territories}
+\begin{itemize}
+    \item \textbf{Propósito}: Almacenar los límites administrativos de los municipios designados como PDET, derivados del Marco Geoestadístico Nacional (MGN) del DANE.
+    
+    \item \textbf{Contenido}: Documentos que contienen el código municipal, nombre oficial y un campo \texttt{geometry} de tipo MultiPolygon bajo el estándar GeoJSON.
+    
+    \item \textbf{Índice}: Se implementará un índice \texttt{2dsphere} sobre el campo de geometría para permitir consultas de contención rápidas.
+\end{itemize}
+
+\textbf{Colección: building\_footprints}
+\begin{itemize}
+    \item \textbf{Propósito}: Consolidar las detecciones de edificios de los datasets de Google Open Buildings y Microsoft Building Footprints para su comparación.
+    
+    \item \textbf{Contenido}: Documentos con la huella del edificio (\texttt{Polygon}), el área calculada, la fuente del dato y metadatos de confianza.
+    
+    \item \textbf{Optimización}: Se incluirá un campo con el código municipal (obtenido tras el procesamiento inicial) para facilitar agregaciones estadísticas sin necesidad de realizar cruces espaciales en cada consulta.
+\end{itemize}
+
+\subsubsection{Justificación Técnica}
+
+La elección de este esquema y del motor NoSQL (MongoDB) se fundamenta en los siguientes pilares:
+
+\begin{itemize}
+    \item \textbf{Soporte nativo geoespacial}: A diferencia de las bases de datos relacionales tradicionales, MongoDB maneja objetos GeoJSON de forma nativa. Esto facilita la ejecución de operadores como \texttt{\$geoWithin} y \texttt{\$geoIntersects}, esenciales para determinar qué edificios pertenecen a cada municipio PDET.
+    
+    \item \textbf{Escalabilidad ante grandes volúmenes de datos}: Los datasets seleccionados contienen miles de millones de detecciones a nivel global. La arquitectura distribuida de MongoDB permite manejar este volumen mediante mecanismos de \textit{sharding}, asegurando que el rendimiento no se degrade a medida que se incorporan nuevas regiones.
+    
+    \item \textbf{Esquema flexible para la comparación de fuentes}: Los datasets de Google y Microsoft no tienen estructuras idénticas. Al ser una base de datos orientada a documentos, MongoDB permite almacenar datos heterogéneos en una misma colección sin imponer una estructura rígida, facilitando la auditoría y comparación.
+    
+    \item \textbf{Eficiencia en operaciones de agregación}: El uso del \textit{Aggregation Framework} de MongoDB permite realizar el conteo de edificios y la suma de áreas de techos de forma masiva y eficiente, cumpliendo con el objetivo de estimar el potencial energético por municipio.
+\end{itemize}
+
+
+
+\section{Conclusión}
+
+
+
+\end{document}
