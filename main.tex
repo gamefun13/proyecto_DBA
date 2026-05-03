@@ -1,21 +1,30 @@
 \documentclass{article}
 
-% Language setting
+% Language and encoding
 \usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 
 % Set page size and margins
 \usepackage[letterpaper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
-\usepackage{attachfile}
-\usepackage{hyperref}
-\usepackage{pdfpages}
+
 % Useful packages
+\PassOptionsToPackage{colorlinks=true,allcolors=blue}{hyperref}
 \usepackage{amsmath}
 \usepackage{graphicx}
-\usepackage[colorlinks=true, allcolors=blue]{hyperref}
-\usepackage{float} %
+\usepackage{float}
+\usepackage{attachfile}
+\usepackage{pdfpages}
+
+% Hyperref should always go last
+\usepackage{hyperref}
+
+% Paragraph spacing
+\setlength{\parskip}{0.8em}
+\setlength{\parindent}{1.5em}
 
 \title{Proyecto Final DBA}
-\author{Daniel Gonzalez, Eduardo De Brigard, Juan Pablo Hernandez}
+\author{Daniel González, Eduardo De Brigard, Juan Pablo Hernández}
 
 \begin{document}
 \maketitle
@@ -142,6 +151,12 @@ La elección de este esquema y del motor NoSQL (MongoDB) se fundamenta en los si
 
 
 \section{Conclusión}
+
+En esta fase del proyecto se definió el diseño de una base de datos NoSQL orientada al manejo de información geoespacial, con el propósito de apoyar el análisis del potencial solar en territorios PDET. Se identificaron las colecciones principales y su relación mediante criterios de contención espacial.
+
+Asimismo, se estableció un plan de implementación que abarca la preparación de la infraestructura, la integración de datos y su procesamiento, haciendo uso de MongoDB y de índices geoespaciales como \textit{2dsphere} para optimizar las consultas.
+
+Este diseño permite estructurar de manera adecuada la información y facilita la ejecución de análisis espaciales sobre los datos considerados.
 
 
 
