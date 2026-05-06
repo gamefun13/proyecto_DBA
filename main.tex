@@ -49,6 +49,7 @@ En el marco de la transición energética impulsada por la Unidad de Planeación
     \begin{itemize}
         \item Filtro PDET: Procesamiento del Marco Geoestadístico Nacional (MGN) del DANE para extraer y limpiar los límites de los municipios priorizados como territorios PDET.
         \item Ingesta de Huellas de Edificios: Carga y normalización de al menos dos de los datasets globales (Microsoft Building Footprints y Google Open Buildings) en la base de datos NoSQL.
+        \item Verificación de Integridad: Validación de formatos estructurales, topología de geometrías y consistencia de códigos DIVIPOLA para asegurar la integridad referencial y la precisión espacial de los datos territoriales integrados en el esquema NoSQL.
     \end{itemize}
 
     \item \textbf{Procesamiento y Análisis Geoespacial}
@@ -60,7 +61,7 @@ En el marco de la transición energética impulsada por la Unidad de Planeación
     \item \textbf{Evaluación y Comparativa de Fuentes}
     \begin{itemize}
         \item Auditoría de Datos (EDA): Realización de un análisis exploratorio para comparar la precisión y el volumen de detecciones entre los datasets seleccionados.
-        \item Verificación de Integridad: Validación de los formatos y la consistencia de los datos integrados en el esquema NoSQL.
+        \item Análisis de Discrepancias: Definición de métricas de validación para identificar variaciones en la detección de estructuras y determinar la fuente con mayor confiabilidad para el cálculo de áreas solares en los municipios seleccionados.
     \end{itemize}
 
     \item \textbf{Consolidación de Resultados}
