@@ -1,0 +1,6 @@
+geopandas
+pymongo
+shapely
+fiona
+pyproj
+rtree
