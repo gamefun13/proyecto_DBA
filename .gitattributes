@@ -1,0 +1,2 @@
+*.zip filter=lfs diff=lfs merge=lfs -text
+Recursos/MGN2025_00_COLOMBIA_2.zip.* filter=lfs diff=lfs merge=lfs -text
