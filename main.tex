@@ -71,7 +71,162 @@ En el marco de la transición energética impulsada por la Unidad de Planeación
     \end{itemize}
 \end{enumerate}
 
-\subsection{Modelo de Datos Inicial}
+\section{Integración de Datos Territoriales y Filtro PDET}
+
+En continuidad con el plan de implementación, se llevó a cabo la integración de la información geoespacial base para disponer de una colección preparada para análisis e ingesta en el entorno NoSQL.
+
+\subsection{Metodología de procesamiento y normalización}
+
+Para seleccionar los territorios priorizados se automatizó el cruce entre el Marco Geoestadístico Nacional (MGN) 2025 del DANE y el listado oficial de municipios PDET mediante scripts reproducibles en Python utilizando GeoPandas, Pandas y Matplotlib.
+
+El flujo implementado permitió garantizar consistencia territorial, normalización de atributos y preparación geoespacial para posteriores procesos de ingesta en MongoDB.
+
+Las acciones principales realizadas durante el procesamiento fueron:
+
+\begin{itemize}
+    \item Estandarización de códigos DIVIPOLA.
+    \item Limpieza de nombres territoriales.
+    \item Eliminación de caracteres Unicode y tildes.
+    \item Validación de coincidencias territoriales.
+    \item Conversión geoespacial a formato GeoJSON.
+\end{itemize}
+
+\vspace{0.3cm}
+
+Como insumo principal del proceso se utilizó la capa administrativa nacional correspondiente al archivo:
+
+\begin{center}
+\texttt{MGN\_ADM\_MPIO\_GRAFICO.shp}
+\end{center}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{images/mgn_shp_qgis.png}
+    \caption{Visualización del shapefile administrativo \texttt{MGN\_ADM\_MPIO\_GRAFICO.shp} cargado en QGIS. La capa representa la totalidad de municipios contenidos en el Marco Geoestadístico Nacional (MGN 2025) del DANE.}
+    \label{fig:mgn_original}
+\end{figure}
+
+Posteriormente, el script en Python realizó el filtrado territorial correspondiente a municipios priorizados PDET y generó el archivo geoespacial:
+
+\begin{center}
+\texttt{pdet\_final.geojson}
+\end{center}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.72\linewidth]{images/pdet_python_plot.png}
+    \caption{Visualización programática del archivo \texttt{pdet\_final.geojson} generado mediante Python y GeoPandas. Cada color representa municipios PDET filtrados tras el proceso de integración territorial.}
+    \label{fig:pdet_geojson}
+\end{figure}
+
+Las visualizaciones obtenidas permitieron realizar un proceso preliminar de validación espacial, verificando continuidad topológica y consistencia geométrica respecto al shapefile original del DANE.
+
+\subsection{Validación geoespacial y control de calidad}
+
+Con el objetivo de validar la integridad geométrica del dataset resultante, se realizaron pruebas visuales mediante QGIS y validaciones programáticas utilizando Python.
+
+Las validaciones efectuadas incluyeron:
+
+\begin{itemize}
+    \item Superposición correcta entre el shapefile original y el GeoJSON generado.
+    \item Validación por lotes de geometrías municipales.
+    \item Validación individual de polígonos territoriales.
+    \item Verificación de continuidad espacial.
+    \item Detección de posibles desplazamientos o geometrías corruptas.
+\end{itemize}
+
+\vspace{0.3cm}
+
+\textbf{Superposición de capas territoriales}
+
+La superposición entre capas permitió verificar que la transformación espacial no introdujera inconsistencias territoriales ni pérdida de entidades durante la conversión.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\linewidth]{images/capas_superpuestas.png}
+    \caption{Superposición entre el shapefile original del DANE y el archivo \texttt{pdet\_final.geojson}. La comparación permitió validar continuidad topológica y consistencia espacial entre ambas capas.}
+    \label{fig:capas_superpuestas}
+\end{figure}
+
+\vspace{0.3cm}
+
+\textbf{Validación visual mediante simbología}
+
+Adicionalmente, se realizaron pruebas manuales modificando simbologías y colores de capas dentro de QGIS con el fin de identificar posibles anomalías geométricas o desplazamientos espaciales.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\linewidth]{images/validacion_colores.png}
+    \caption{Validación visual mediante modificación de simbología y colores en QGIS. Este procedimiento permitió identificar posibles inconsistencias geométricas y verificar independencia topológica entre polígonos municipales.}
+    \label{fig:validacion_colores}
+\end{figure}
+
+\vspace{0.3cm}
+
+\textbf{Validación por lotes}
+
+El proceso de control incluyó validaciones por lotes sobre múltiples geometrías municipales para verificar integridad estructural y correcta carga espacial.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{images/validacion_lotes.png}
+    \caption{Proceso de validación por lotes realizado sobre múltiples geometrías municipales. La validación confirmó una carga espacial exitosa y ausencia de errores topológicos críticos.}
+    \label{fig:validacion_lotes}
+\end{figure}
+
+\vspace{0.3cm}
+
+\textbf{Validación individual de geometrías}
+
+También se realizaron inspecciones individuales sobre municipios específicos con el objetivo de corroborar la correcta representación cartográfica y creación adecuada de nuevas capas territoriales.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{images/validacion_individual.png}
+    \caption{Validación individual de geometrías territoriales. La inspección permitió corroborar la correcta representación cartográfica de municipios específicos dentro del conjunto PDET.}
+    \label{fig:validacion_individual}
+\end{figure}
+
+\vspace{0.3cm}
+
+\textbf{Evidencia de ejecución del pipeline}
+
+Durante la ejecución del pipeline geoespacial se obtuvieron resultados de validación en consola similares a los siguientes:
+
+\begin{verbatim}
+Cruce por código DANE: encontrados 170 registros.
+
+--- RESULTADOS ---
+Municipios cargados del SHP: 1123
+Municipios en tu lista PDET: 170
+Municipios PDET encontrados tras el cruce: 170
+
+[OK] Archivo 'pdet_final.geojson' creado correctamente.
+\end{verbatim}
+
+Estos resultados evidencian la correcta integración territorial y la generación satisfactoria del dataset geoespacial requerido para etapas posteriores del proyecto.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{images/python_console.png}
+    \caption{Salida en consola del pipeline geoespacial implementado en Python, evidenciando la carga del shapefile, integración territorial y generación del archivo GeoJSON final.}
+    \label{fig:console_output}
+\end{figure}
+
+\vspace{0.3cm}
+
+\textbf{Exportación geoespacial final}
+
+La exportación del subconjunto territorial resultante se realizó mediante la siguiente instrucción:
+
+\begin{verbatim}
+resultado_final.to_file(
+    "pdet_final.geojson",
+    driver="GeoJSON"
+)
+\end{verbatim}
+
+Esta transformación constituye una etapa crítica dentro del pipeline geoespacial, debido a que permite convertir estructuras territoriales tradicionales en objetos GeoJSON compatibles con MongoDB y operaciones espaciales NoSQL.\subsection{Modelo de Datos Inicial}
 
 Dado que el proyecto requiere una solución NoSQL, el modelado se centra en la estructura de documentos JSON (BSON) y en la optimización de consultas geoespaciales. A continuación, se definen las dos entidades principales y su interacción lógica:
 
@@ -140,25 +295,29 @@ Para cumplir con el requerimiento de una solución escalable y eficiente en oper
 La elección de este esquema y del motor NoSQL (MongoDB) se fundamenta en los siguientes pilares:
 
 \begin{itemize}
+
     \item \textbf{Soporte nativo geoespacial}: A diferencia de las bases de datos relacionales tradicionales, MongoDB maneja objetos GeoJSON de forma nativa. Esto facilita la ejecución de operadores como \texttt{\$geoWithin} y \texttt{\$geoIntersects}, esenciales para determinar qué edificios pertenecen a cada municipio PDET.
-    
-    \item \textbf{Escalabilidad ante grandes volúmenes de datos}: Los datasets seleccionados contienen miles de millones de detecciones a nivel global. La arquitectura distribuida de MongoDB permite manejar este volumen mediante mecanismos de \textit{sharding}, asegurando que el rendimiento no se degrade a medida que se incorporan nuevas regiones.
-    
-    \item \textbf{Esquema flexible para la comparación de fuentes}: Los datasets de Google y Microsoft no tienen estructuras idénticas. Al ser una base de datos orientada a documentos, MongoDB permite almacenar datos heterogéneos en una misma colección sin imponer una estructura rígida, facilitando la auditoría y comparación.
-    
-    \item \textbf{Eficiencia en operaciones de agregación}: El uso del \textit{Aggregation Framework} de MongoDB permite realizar el conteo de edificios y la suma de áreas de techos de forma masiva y eficiente, cumpliendo con el objetivo de estimar el potencial energético por municipio.
+
+    \item \textbf{Escalabilidad}: El proyecto requiere procesar millones de registros provenientes de datasets globales de huellas de edificios. MongoDB permite manejar grandes volúmenes de información geoespacial de forma distribuida y eficiente.
+
+    \item \textbf{Flexibilidad de esquema}: Debido a que los datasets utilizados provienen de múltiples fuentes (Google y Microsoft), existen diferencias estructurales y variaciones en atributos. El modelo orientado a documentos facilita la integración de estructuras heterogéneas sin requerir migraciones complejas.
+
+    \item \textbf{Optimización de consultas espaciales}: La implementación de índices \texttt{2dsphere} permite acelerar operaciones de proximidad, intersección y contención espacial sobre polígonos territoriales y huellas de edificaciones.
+
+    \item \textbf{Compatibilidad con pipelines geoespaciales}: El uso de GeoJSON facilita la interoperabilidad entre herramientas como QGIS, GeoPandas y MongoDB, permitiendo mantener consistencia espacial durante todas las etapas del procesamiento.
+
 \end{itemize}
-
-
 
 \section{Conclusión}
 
-En esta fase del proyecto se definió el diseño de una base de datos NoSQL orientada al manejo de información geoespacial, con el propósito de apoyar el análisis del potencial solar en territorios PDET. Se identificaron las colecciones principales y su relación mediante criterios de contención espacial.
+En el desarrollo de esta fase del proyecto se diseñó una arquitectura NoSQL orientada al procesamiento y análisis de información geoespacial asociada a territorios PDET y huellas de edificaciones. La solución propuesta utiliza MongoDB como motor principal debido a su soporte nativo para estructuras GeoJSON y consultas espaciales avanzadas.
 
-Asimismo, se estableció un plan de implementación que abarca la preparación de la infraestructura, la integración de datos y su procesamiento, haciendo uso de MongoDB y de índices geoespaciales como \textit{2dsphere} para optimizar las consultas.
+Como resultado del proceso de integración territorial, se logró consolidar un conjunto geoespacial validado a partir del Marco Geoestadístico Nacional (MGN 2025) del DANE y del listado oficial de municipios PDET. El pipeline implementado permitió realizar procesos de limpieza, normalización, validación topológica y exportación a formatos compatibles con tecnologías NoSQL.
 
-Este diseño permite estructurar de manera adecuada la información y facilita la ejecución de análisis espaciales sobre los datos considerados.
+Adicionalmente, se definieron las colecciones principales del modelo de datos (\texttt{territorios\_pdet} y \texttt{huellas\_edificios}), así como la estrategia de indexación geoespacial mediante índices \texttt{2dsphere}, fundamentales para optimizar operaciones de intersección y contención espacial sobre grandes volúmenes de datos territoriales.
 
+La transición desde formatos tradicionales como Shapefile hacia estructuras GeoJSON representa una mejora significativa en términos de interoperabilidad, escalabilidad y eficiencia computacional. Esto permitirá integrar posteriormente datasets masivos de edificaciones provenientes de Google Open Buildings y Microsoft Building Footprints para estimar áreas disponibles para infraestructura solar en municipios priorizados.
 
+Finalmente, el trabajo desarrollado establece una base sólida para las siguientes etapas del proyecto, las cuales incluyen la ingesta masiva de huellas de edificios, la ejecución de consultas geoespaciales avanzadas y la generación de métricas territoriales orientadas al análisis del potencial solar y apoyo a estrategias de transición energética en Colombia.
 
 \end{document}
