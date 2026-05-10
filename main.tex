@@ -101,7 +101,7 @@ Como insumo principal del proceso se utilizó la capa administrativa nacional co
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\linewidth]{images/mgn_shp_qgis.png}
+    \includegraphics[width=0.95\linewidth]{images/mgn_shp_qgis.jpeg}
     \caption{Visualización del shapefile administrativo \texttt{MGN\_ADM\_MPIO\_GRAFICO.shp} cargado en QGIS. La capa representa la totalidad de municipios contenidos en el Marco Geoestadístico Nacional (MGN 2025) del DANE.}
     \label{fig:mgn_original}
 \end{figure}
@@ -114,7 +114,7 @@ Posteriormente, el script en Python realizó el filtrado territorial correspondi
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.72\linewidth]{images/pdet_python_plot.png}
+    \includegraphics[width=0.72\linewidth]{images/pdet_python_plot.jpeg}
     \caption{Visualización programática del archivo \texttt{pdet\_final.geojson} generado mediante Python y GeoPandas. Cada color representa municipios PDET filtrados tras el proceso de integración territorial.}
     \label{fig:pdet_geojson}
 \end{figure}
@@ -143,7 +143,7 @@ La superposición entre capas permitió verificar que la transformación espacia
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.92\linewidth]{images/capas_superpuestas.png}
+    \includegraphics[width=0.92\linewidth]{images/capas_superpuestas.jpeg}
     \caption{Superposición entre el shapefile original del DANE y el archivo \texttt{pdet\_final.geojson}. La comparación permitió validar continuidad topológica y consistencia espacial entre ambas capas.}
     \label{fig:capas_superpuestas}
 \end{figure}
@@ -156,7 +156,7 @@ Adicionalmente, se realizaron pruebas manuales modificando simbologías y colore
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.92\linewidth]{images/validacion_colores.png}
+    \includegraphics[width=0.92\linewidth]{images/validacion_colores.jpeg}
     \caption{Validación visual mediante modificación de simbología y colores en QGIS. Este procedimiento permitió identificar posibles inconsistencias geométricas y verificar independencia topológica entre polígonos municipales.}
     \label{fig:validacion_colores}
 \end{figure}
@@ -169,7 +169,7 @@ El proceso de control incluyó validaciones por lotes sobre múltiples geometrí
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.82\linewidth]{images/validacion_lotes.png}
+    \includegraphics[width=0.82\linewidth]{images/validacion_lotes.jpeg}
     \caption{Proceso de validación por lotes realizado sobre múltiples geometrías municipales. La validación confirmó una carga espacial exitosa y ausencia de errores topológicos críticos.}
     \label{fig:validacion_lotes}
 \end{figure}
@@ -182,7 +182,7 @@ También se realizaron inspecciones individuales sobre municipios específicos c
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.82\linewidth]{images/validacion_individual.png}
+    \includegraphics[width=0.82\linewidth]{images/validacion_individual.jpeg}
     \caption{Validación individual de geometrías territoriales. La inspección permitió corroborar la correcta representación cartográfica de municipios específicos dentro del conjunto PDET.}
     \label{fig:validacion_individual}
 \end{figure}
@@ -208,7 +208,7 @@ Estos resultados evidencian la correcta integración territorial y la generació
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\linewidth]{images/python_console.png}
+    \includegraphics[width=0.95\linewidth]{images/python_console.jpeg}
     \caption{Salida en consola del pipeline geoespacial implementado en Python, evidenciando la carga del shapefile, integración territorial y generación del archivo GeoJSON final.}
     \label{fig:console_output}
 \end{figure}
