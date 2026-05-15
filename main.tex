@@ -12,6 +12,7 @@
 \PassOptionsToPackage{colorlinks=true,allcolors=blue}{hyperref}
 \usepackage{amsmath}
 \usepackage{graphicx}
+\graphicspath{{Imagenes/}}
 \usepackage{float}
 \usepackage{attachfile}
 \usepackage{pdfpages}
@@ -23,7 +24,8 @@
 \setlength{\parskip}{0.8em}
 \setlength{\parindent}{1.5em}
 
-\title{Proyecto Final DBA}
+\title{Proyecto Final\\
+Diseño e Implementación de Arquitectura NoSQL Geoespacial para Análisis de Potencial Solar en Territorios PDET}
 \author{Daniel González, Eduardo De Brigard, Juan Pablo Hernández}
 
 \begin{document}
@@ -71,12 +73,94 @@ En el marco de la transición energética impulsada por la Unidad de Planeación
     \end{itemize}
 \end{enumerate}
 
-\section{Integración de Datos Territoriales y Filtro PDET}
+\subsection{Diseño del Modelo de Datos}
+
+\subsubsection{A. Representación del Modelo (Estructura de Documentos)}
+
+A continuación, se presentan las colecciones principales definidas para el almacenamiento y procesamiento de información geoespacial dentro del entorno NoSQL propuesto.
+
+\textbf{Colección: territorios\_pdet}
+
+\begin{itemize}
+    \item \texttt{\_id}: Identificador único (ObjectId)
+    \item \texttt{codigo\_mgn}: Código municipal del DANE
+    \item \texttt{nombre\_municipio}: Nombre oficial
+    \item \texttt{geometria\_pdet}: Objeto GeoJSON (MultiPolygon) que define los límites del municipio
+    \item \texttt{datos\_pdet}: Información sobre el programa de desarrollo
+\end{itemize}
+
+\textbf{Colección: huellas\_edificios}
+\begin{itemize}
+    \item \texttt{\_id}: Identificador único (ObjectId)
+    \item \texttt{fuente}: Origen del dato (Microsoft o Google)
+    \item \texttt{geometria\_edificio}: Objeto GeoJSON (Polygon) con la huella del edificio
+    \item \texttt{area\_estimada\_m2}: Valor numérico calculado para el potencial solar
+    \item \texttt{metadata}: Confianza de detección y fecha de captura
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{Imagenes/colecciones.drawio.png}
+    \caption{Esquema de base de datos}
+\end{figure}
+
+\subsubsection{B. Instrumento de Modelado: Relación Espacial}
+
+En este modelo, la relación no se define mediante claves foráneas como en bases de datos relacionales, sino mediante una lógica de contención espacial:
+
+\begin{itemize}
+    \item \textbf{Vínculo lógico}: Un documento en \texttt{huellas\_edificios} pertenece a un territorio en \texttt{territorios\_pdet} si su \texttt{geometria\_edificio} está contenida dentro de \texttt{geometria\_pdet}.
+    
+    \item \textbf{Mecanismo de consulta}: Se utilizará el operador \texttt{\$geoWithin} de MongoDB para realizar el cruce de datos en tiempo de ejecución, evitando redundancia innecesaria.
+\end{itemize}
+
+\subsection{Esquema de Datos y Justificación}
+
+Para cumplir con el requerimiento de una solución escalable y eficiente en operaciones espaciales, se ha diseñado un esquema basado en dos colecciones principales dentro de MongoDB.
+
+\subsubsection{Descripción de las Colecciones}
+
+\textbf{Colección: pdet\_territories}
+\begin{itemize}
+    \item \textbf{Propósito}: Almacenar los límites administrativos de los municipios designados como PDET, derivados del Marco Geoestadístico Nacional (MGN) del DANE.
+    
+    \item \textbf{Contenido}: Documentos que contienen el código municipal, nombre oficial y un campo \texttt{geometry} de tipo MultiPolygon bajo el estándar GeoJSON.
+    
+    \item \textbf{Índice}: Se implementará un índice \texttt{2dsphere} sobre el campo de geometría para permitir consultas de contención rápidas.
+\end{itemize}
+
+\textbf{Colección: building\_footprints}
+\begin{itemize}
+    \item \textbf{Propósito}: Consolidar las detecciones de edificios de los datasets de Google Open Buildings y Microsoft Building Footprints para su comparación.
+    
+    \item \textbf{Contenido}: Documentos con la huella del edificio (\texttt{Polygon}), el área calculada, la fuente del dato y metadatos de confianza.
+    
+    \item \textbf{Optimización}: Se incluirá un campo con el código municipal (obtenido tras el procesamiento inicial) para facilitar agregaciones estadísticas sin necesidad de realizar cruces espaciales en cada consulta.
+\end{itemize}
+
+\subsubsection{Justificación Técnica}
+
+La elección de este esquema y del motor NoSQL (MongoDB) se fundamenta en los siguientes pilares:
+
+\begin{itemize}
+
+    \item \textbf{Soporte nativo geoespacial}: A diferencia de las bases de datos relacionales tradicionales, MongoDB maneja objetos GeoJSON de forma nativa. Esto facilita la ejecución de operadores como \texttt{\$geoWithin} y \texttt{\$geoIntersects}, esenciales para determinar qué edificios pertenecen a cada municipio PDET.
+
+    \item \textbf{Escalabilidad}: El proyecto requiere procesar millones de registros provenientes de datasets globales de huellas de edificios. MongoDB permite manejar grandes volúmenes de información geoespacial de forma distribuida y eficiente.
+
+    \item \textbf{Flexibilidad de esquema}: Debido a que los datasets utilizados provienen de múltiples fuentes (Google y Microsoft), existen diferencias estructurales y variaciones en atributos. El modelo orientado a documentos facilita la integración de estructuras heterogéneas sin requerir migraciones complejas.
+
+    \item \textbf{Optimización de consultas espaciales}: La implementación de índices \texttt{2dsphere} permite acelerar operaciones de proximidad, intersección y contención espacial sobre polígonos territoriales y huellas de edificaciones.
+
+    \item \textbf{Compatibilidad con pipelines geoespaciales}: El uso de GeoJSON facilita la interoperabilidad entre herramientas como QGIS, GeoPandas y MongoDB, permitiendo mantener consistencia espacial durante todas las etapas del procesamiento.
+
+\end{itemize}
+ 
+\subsection{Integración de Datos Territoriales y Filtro PDET}
 
 En continuidad con el plan de implementación, se llevó a cabo la integración de la información geoespacial base para disponer de una colección preparada para análisis e ingesta en el entorno NoSQL.
 
-\subsection{Metodología de procesamiento y normalización}
-
+\subsubsection{Metodología de procesamiento y normalización}
 Para seleccionar los territorios priorizados se automatizó el cruce entre el Marco Geoestadístico Nacional (MGN) 2025 del DANE y el listado oficial de municipios PDET mediante scripts reproducibles en Python utilizando GeoPandas, Pandas y Matplotlib.
 
 El flujo implementado permitió garantizar consistencia territorial, normalización de atributos y preparación geoespacial para posteriores procesos de ingesta en MongoDB.
@@ -121,7 +205,7 @@ Posteriormente, el script en Python realizó el filtrado territorial correspondi
 
 Las visualizaciones obtenidas permitieron realizar un proceso preliminar de validación espacial, verificando continuidad topológica y consistencia geométrica respecto al shapefile original del DANE.
 
-\subsection{Validación geoespacial y control de calidad}
+\subsubsection{Validación geoespacial y control de calidad}
 
 Con el objetivo de validar la integridad geométrica del dataset resultante, se realizaron pruebas visuales mediante QGIS y validaciones programáticas utilizando Python.
 
@@ -226,87 +310,7 @@ resultado_final.to_file(
 )
 \end{verbatim}
 
-Esta transformación constituye una etapa crítica dentro del pipeline geoespacial, debido a que permite convertir estructuras territoriales tradicionales en objetos GeoJSON compatibles con MongoDB y operaciones espaciales NoSQL.\subsection{Modelo de Datos Inicial}
-
-Dado que el proyecto requiere una solución NoSQL, el modelado se centra en la estructura de documentos JSON (BSON) y en la optimización de consultas geoespaciales. A continuación, se definen las dos entidades principales y su interacción lógica:
-
-\subsubsection{A. Representación del Modelo (Estructura de Documentos)}
-
-\textbf{Colección: territorios\_pdet}
-\begin{itemize}
-    \item \texttt{\_id}: Identificador único (ObjectId)
-    \item \texttt{codigo\_mgn}: Código municipal del DANE
-    \item \texttt{nombre\_municipio}: Nombre oficial
-    \item \texttt{geometria\_pdet}: Objeto GeoJSON (MultiPolygon) que define los límites del municipio
-    \item \texttt{datos\_pdet}: Información sobre el programa de desarrollo
-\end{itemize}
-
-\textbf{Colección: huellas\_edificios}
-\begin{itemize}
-    \item \texttt{\_id}: Identificador único (ObjectId)
-    \item \texttt{fuente}: Origen del dato (Microsoft o Google)
-    \item \texttt{geometria\_edificio}: Objeto GeoJSON (Polygon) con la huella del edificio
-    \item \texttt{area\_estimada\_m2}: Valor numérico calculado para el potencial solar
-    \item \texttt{metadata}: Confianza de detección y fecha de captura
-\end{itemize}
-
-\begin{figure}[h]
-    \centering
-    \includegraphics[width=0.6\textwidth]{Imagenes/colecciones.drawio.png}
-    \caption{Esquema de base de datos}
-\end{figure}
-
-\subsubsection{B. Instrumento de Modelado: Relación Espacial}
-
-En este modelo, la relación no se define mediante claves foráneas como en bases de datos relacionales, sino mediante una lógica de contención espacial:
-
-\begin{itemize}
-    \item \textbf{Vínculo lógico}: Un documento en \texttt{huellas\_edificios} pertenece a un territorio en \texttt{territorios\_pdet} si su \texttt{geometria\_edificio} está contenida dentro de \texttt{geometria\_pdet}.
-    
-    \item \textbf{Mecanismo de consulta}: Se utilizará el operador \texttt{\$geoWithin} de MongoDB para realizar el cruce de datos en tiempo de ejecución, evitando redundancia innecesaria.
-\end{itemize}
-
-\subsection{Esquema de Datos y Justificación}
-
-Para cumplir con el requerimiento de una solución escalable y eficiente en operaciones espaciales, se ha diseñado un esquema basado en dos colecciones principales dentro de MongoDB.
-
-\subsubsection{Descripción de las Colecciones}
-
-\textbf{Colección: pdet\_territories}
-\begin{itemize}
-    \item \textbf{Propósito}: Almacenar los límites administrativos de los municipios designados como PDET, derivados del Marco Geoestadístico Nacional (MGN) del DANE.
-    
-    \item \textbf{Contenido}: Documentos que contienen el código municipal, nombre oficial y un campo \texttt{geometry} de tipo MultiPolygon bajo el estándar GeoJSON.
-    
-    \item \textbf{Índice}: Se implementará un índice \texttt{2dsphere} sobre el campo de geometría para permitir consultas de contención rápidas.
-\end{itemize}
-
-\textbf{Colección: building\_footprints}
-\begin{itemize}
-    \item \textbf{Propósito}: Consolidar las detecciones de edificios de los datasets de Google Open Buildings y Microsoft Building Footprints para su comparación.
-    
-    \item \textbf{Contenido}: Documentos con la huella del edificio (\texttt{Polygon}), el área calculada, la fuente del dato y metadatos de confianza.
-    
-    \item \textbf{Optimización}: Se incluirá un campo con el código municipal (obtenido tras el procesamiento inicial) para facilitar agregaciones estadísticas sin necesidad de realizar cruces espaciales en cada consulta.
-\end{itemize}
-
-\subsubsection{Justificación Técnica}
-
-La elección de este esquema y del motor NoSQL (MongoDB) se fundamenta en los siguientes pilares:
-
-\begin{itemize}
-
-    \item \textbf{Soporte nativo geoespacial}: A diferencia de las bases de datos relacionales tradicionales, MongoDB maneja objetos GeoJSON de forma nativa. Esto facilita la ejecución de operadores como \texttt{\$geoWithin} y \texttt{\$geoIntersects}, esenciales para determinar qué edificios pertenecen a cada municipio PDET.
-
-    \item \textbf{Escalabilidad}: El proyecto requiere procesar millones de registros provenientes de datasets globales de huellas de edificios. MongoDB permite manejar grandes volúmenes de información geoespacial de forma distribuida y eficiente.
-
-    \item \textbf{Flexibilidad de esquema}: Debido a que los datasets utilizados provienen de múltiples fuentes (Google y Microsoft), existen diferencias estructurales y variaciones en atributos. El modelo orientado a documentos facilita la integración de estructuras heterogéneas sin requerir migraciones complejas.
-
-    \item \textbf{Optimización de consultas espaciales}: La implementación de índices \texttt{2dsphere} permite acelerar operaciones de proximidad, intersección y contención espacial sobre polígonos territoriales y huellas de edificaciones.
-
-    \item \textbf{Compatibilidad con pipelines geoespaciales}: El uso de GeoJSON facilita la interoperabilidad entre herramientas como QGIS, GeoPandas y MongoDB, permitiendo mantener consistencia espacial durante todas las etapas del procesamiento.
-
-\end{itemize}
+Esta transformación constituye una etapa crítica dentro del pipeline geoespacial, debido a que permite convertir estructuras territoriales tradicionales en objetos GeoJSON compatibles con MongoDB y operaciones espaciales NoSQL.
 
 \section{Conclusión}
 
