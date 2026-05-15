@@ -1,0 +1,33 @@
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.synctex(busy)
+*.nav
+*.snm
+*.vrb
+*.bbl
+*.blg
+*.run.xml
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+__pycache__/
+*.pyc
+
+# Archives and temporary
+*.zip
+*.tar
+*.gz
+
+# Ignore temporary files created by some editors
+*~
+*.swp
