@@ -16,6 +16,28 @@
 \usepackage{float}
 \usepackage{attachfile}
 \usepackage{pdfpages}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{amsmath}
+
+\usepackage{parskip}
 
 % Hyperref should always go last
 \usepackage{hyperref}
@@ -27,6 +49,65 @@
 \title{Proyecto Final\\
 Diseño e Implementación de Arquitectura NoSQL Geoespacial para Análisis de Potencial Solar en Territorios PDET}
 \author{Daniel González, Eduardo De Brigard, Juan Pablo Hernández}
+
+% ── Colores ───────────────────────────────────────────────────────────────────
+\definecolor{azul}{RGB}{0,0,0}
+\definecolor{azulclaro}{RGB}{0,0,0}
+\definecolor{grisclaro}{RGB}{214,228,240}
+\definecolor{grisfilas}{RGB}{242,247,251}
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codeframe}{RGB}{180,180,180}
+\definecolor{verde}{RGB}{0,128,0}
+\definecolor{rojo}{RGB}{192,0,0}
+
+% ── Listings (código) ─────────────────────────────────────────────────────────
+\lstset{
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{azulclaro}\bfseries,
+  commentstyle=\color{verde}\itshape,
+  stringstyle=\color{rojo},
+  breaklines=true,
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  tabsize=4,
+  captionpos=b
+}
+
+\lstdefinelanguage{JavaScript}{
+  keywords={const,let,var,function,return,if,else,for,while,new,true,false,null},
+  morecomment=[l]{//},
+  morestring=[b]"
+}
+
+% ── Hyperref ─────────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=azulclaro,
+  urlcolor=azulclaro,
+  citecolor=azulclaro
+}
+
+% ── Comando para celdas de encabezado de tabla ────────────────────────────────
+\newcommand{\tblhdr}[1]{%
+  \cellcolor{azulclaro}\textbf{\textcolor{white}{#1}}%
+}
+\newcommand{\tblhdraz}[1]{%
+  \cellcolor{azul}\textbf{\textcolor{white}{#1}}%
+}
+
+% ══════════════════════════════════════════════════════════════════════════════
+
+
+
+
+
+
+
 
 \begin{document}
 \maketitle
@@ -312,16 +393,399 @@ resultado_final.to_file(
 
 Esta transformación constituye una etapa crítica dentro del pipeline geoespacial, debido a que permite convertir estructuras territoriales tradicionales en objetos GeoJSON compatibles con MongoDB y operaciones espaciales NoSQL.
 
-\section{Conclusión}
+\section{Adquisición de Datos}
 
-En el desarrollo de esta fase del proyecto se diseñó una arquitectura NoSQL orientada al procesamiento y análisis de información geoespacial asociada a territorios PDET y huellas de edificaciones. La solución propuesta utiliza MongoDB como motor principal debido a su soporte nativo para estructuras GeoJSON y consultas espaciales avanzadas.
+\subsection{Google Open Buildings}
 
-Como resultado del proceso de integración territorial, se logró consolidar un conjunto geoespacial validado a partir del Marco Geoestadístico Nacional (MGN 2025) del DANE y del listado oficial de municipios PDET. El pipeline implementado permitió realizar procesos de limpieza, normalización, validación topológica y exportación a formatos compatibles con tecnologías NoSQL.
+\subsubsection{Descripción del dataset}
 
-Adicionalmente, se definieron las colecciones principales del modelo de datos (\texttt{territorios\_pdet} y \texttt{huellas\_edificios}), así como la estrategia de indexación geoespacial mediante índices \texttt{2dsphere}, fundamentales para optimizar operaciones de intersección y contención espacial sobre grandes volúmenes de datos territoriales.
+Google Open Buildings es un dataset desarrollado por Google Research que contiene detecciones de edificios derivadas de imágenes satelitales de alta resolución. La versión 3 del dataset cubre Latinoamérica, el Caribe, África, Asia del Sur y Asia del Sureste, con un área de inferencia de 58 millones de km\textsuperscript{2}.
 
-La transición desde formatos tradicionales como Shapefile hacia estructuras GeoJSON representa una mejora significativa en términos de interoperabilidad, escalabilidad y eficiencia computacional. Esto permitirá integrar posteriormente datasets masivos de edificaciones provenientes de Google Open Buildings y Microsoft Building Footprints para estimar áreas disponibles para infraestructura solar en municipios priorizados.
+\begin{table}[H]
+\centering
+\caption{Características del dataset Google Open Buildings}
+\begin{tabular}{>{\bfseries}p{5cm} p{8cm}}
+\toprule
+\tblhdr{Atributo} & \tblhdr{Detalle} \\
+\midrule
+Versión           & v3 (tercera versión) \\
+\rowcolor{grisfilas}
+Detecciones totales & $\sim$1.8 mil millones \\
+Área de cobertura & 58 millones de km\textsuperscript{2} \\
+\rowcolor{grisfilas}
+Formato de distribución & CSV comprimido (.csv.gz) por cuadrante \\
+Atributos principales & geometry (WKT), area\_in\_meters, confidence, full\_plus\_code \\
+\rowcolor{grisfilas}
+Licencia          & CC BY-4.0 / ODbL v1.0 \\
+URL               & \url{https://sites.research.google/gr/open-buildings/} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-Finalmente, el trabajo desarrollado establece una base sólida para las siguientes etapas del proyecto, las cuales incluyen la ingesta masiva de huellas de edificios, la ejecución de consultas geoespaciales avanzadas y la generación de métricas territoriales orientadas al análisis del potencial solar y apoyo a estrategias de transición energética en Colombia.
+\subsubsection{Proceso de descarga}
+
+Los archivos fueron descargados directamente desde el portal de Google Open Buildings, filtrando por la región correspondiente a Colombia. Cada archivo CSV comprimido contiene las huellas de edificios para un cuadrante geográfico específico, con los siguientes campos principales:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{Imagenes/google.png}
+    \caption{Google open buildings}
+    \label{fig:mi_imagen}
+\end{figure}
+
+Esto descarga unos archivos .csv.grz en los cuales estan los datos,en el script.py,se aplicó un filtro mínimo de confianza de \textbf{0.60} durante la carga, descartando detecciones con baja certeza de ser edificaciones reales.
+
+\subsection{Microsoft Global ML Building Footprints}
+
+\subsubsection{Descripción del dataset}
+
+Microsoft Global ML Building Footprints es un dataset desarrollado por Microsoft Research a partir de imágenes de Bing Maps recolectadas entre 2014 y 2021, incorporando fuentes como Maxar y Airbus. Contiene más de 999 millones de detecciones de edificios a nivel mundial.
+
+\begin{table}[H]
+\centering
+\caption{Características del dataset Microsoft Building Footprints}
+\begin{tabular}{>{\bfseries}p{5cm} p{8cm}}
+\toprule
+\tblhdr{Atributo} & \tblhdr{Detalle} \\
+\midrule
+Detecciones totales & $>$999 millones \\
+\rowcolor{grisfilas}
+Período de imágenes & 2014 -- 2021 \\
+Formato de distribución & GeoJSON por cuadrante (QuadKey) \\
+\rowcolor{grisfilas}
+Atributos principales & geometry (GeoJSON Polygon), height, confidence \\
+Licencia          & Open Data Commons Open Database License (ODbL) \\
+\rowcolor{grisfilas}
+URL               & \url{https://planetarycomputer.microsoft.com/dataset/ms-buildings} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Proceso de descarga}
+
+Microsoft distribuye sus datos a través de un índice CSV que lista todos los cuadrantes disponibles por país. El proceso de descarga se basó en el snippet oficial de Microsoft, adaptado para filtrar únicamente los cuadrantes correspondientes a Colombia,este proceso se descarga se puede ver en el pruebasDosMicro.py:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{Imagenes/micro.png}
+    \caption{Google open buildings}
+    \label{fig:mi_imagen}
+\end{figure}
+
+Para Colombia se identificaron y descargaron \textbf{229 cuadrantes GeoJSON}, cada uno correspondiente a un QuadKey único del sistema de indexación de Bing Maps.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Integración en MongoDB e Indexación Espacial}
+
+\subsection{Arquitectura de colecciones}
+
+Los datos fueron almacenados en tres colecciones dentro de la base de datos \texttt{proyecto} en MongoDB:
+
+\begin{table}[H]
+\centering
+\caption{Colecciones en MongoDB}
+\begin{tabular}{p{4.5cm} p{3cm} p{5cm}}
+\toprule
+\tblhdr{Colección} & \tblhdr{Documentos} & \tblhdr{Propósito} \\
+\midrule
+\texttt{territorios\_pdet}   & 164         & Límites municipales PDET \\
+\rowcolor{grisfilas}
+\texttt{google\_buildings}   & 2,617,289   & Huellas de edificios (Google) \\
+\texttt{microsoft\_buildings} & 736,207    & Huellas de edificios (Microsoft) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Esquema de documento}
+
+Cada edificio, independientemente de la fuente, sigue el esquema unificado definido desde la semana 1:
+
+\begin{lstlisting}[language=JavaScript, caption={Esquema unificado de documento en mongodb}]
+{
+  "_id":              ObjectId,
+  "fuente":           "google" | "microsoft",
+  "codigo_mgn":       "47001",          // codigo DANE del municipio
+  "nombre_municipio": "SANTA MARTA",
+  "geometria_edificio": {               // GeoJSON Polygon
+    "type": "Polygon",
+    "coordinates": [[[lng, lat], ...]]
+  },
+  "area_estimada_m2": 87.39,            // solo Google
+  "metadata": {
+    "confianza":       0.78,
+    "altura_m":        null,            // solo Microsoft cuando disponible
+    "fuente_imagen":   "Google Satellite Imagery",
+    "dataset_version": "Google Open Buildings v3"
+  }
+}
+\end{lstlisting}
+
+\subsection{Indexación espacial}
+
+Se implementaron índices \texttt{2dsphere} sobre el campo \texttt{geometria\_edificio} en ambas colecciones de edificios, junto con índices auxiliares para acelerar consultas por fuente y municipio:
+
+\begin{lstlisting}[language=Python, caption={Creación de índices espaciales en MongoDB}]
+# Índice geoespacial 2dsphere (requerido para $geoWithin, $geoIntersects)
+col.create_index(
+    [("geometria_edificio", GEOSPHERE)],
+    name="idx_geo_edificio"
+)
+# Índices auxiliares para agregaciones
+col.create_index("fuente",     name="idx_fuente")
+col.create_index("codigo_mgn", name="idx_codigo_mgn")
+\end{lstlisting}
+
+\subsection{Proceso de cruce espacial y filtro PDET}
+
+Un paso crítico en el pipeline de carga fue el cruce espacial entre cada edificio y los polígonos PDET. Solo se insertaron en MongoDB los edificios cuyo centroide cayera \textit{dentro} de algún municipio PDET. Este filtro se implementó de dos formas según la fuente:
+
+\begin{itemize}[leftmargin=1.5cm]
+  \item \textbf{Google}: uso de \texttt{STRtree} de Shapely para consulta espacial eficiente con \texttt{tree.query()} y validación con \texttt{contains()}.
+  \item \textbf{Microsoft}: uso de \texttt{geopandas.sjoin()} vectorizado con predicado \texttt{within}, procesando todos los edificios de un cuadrante simultáneamente.
+\end{itemize}
+
+\subsection{Eficiencia de carga}
+
+Para garantizar una carga eficiente de grandes volúmenes de datos, se implementó escritura por lotes (\textit{bulk write}) con un tamaño de lote de 2,000 documentos:
+
+\begin{lstlisting}[language=Python, caption={Inserción por lotes con bulk\_write}]
+batch.append(InsertOne(doc))
+                count += 1
+
+                if len(batch) >= BATCH_SIZE:
+                    col.bulk_write(batch, ordered=False)
+                    batch = []
+
+            except Exception as e:
+                log.debug(f"  Feature omitida por error: {e}")
+                omitidos += 1
+                continue
+
+        if batch:
+            col.bulk_write(batch, ordered=False)
+
+        log.info(f"  -> {count:,} edificios PDET insertados | {omitidos:,} omitidos (fuera de PDET o invalidos)")
+        total_global    += count
+        omitidos_global += omitidos
+\end{lstlisting}
+
+El parámetro \texttt{ordered=False} permite que MongoDB procese las inserciones en paralelo, mejorando el rendimiento y tolerando errores individuales sin detener el proceso completo.
+
+\section{Auditoría Inicial de Datos (EDA)}
+
+\subsection{Resumen general}
+
+Tras completar la carga de ambos datasets, se realizó un análisis exploratorio de datos (EDA) directamente sobre las colecciones de MongoDB mediante pipelines de agregación. Los resultados globales se presentan a continuación:
+
+\begin{table}[H]
+\centering
+\caption{Resumen general de edificios cargados por fuente}
+\begin{tabular}{p{5cm} r r}
+\toprule
+\tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
+\midrule
+Total de edificios                  & 2,617,289   & 736,207 \\
+\rowcolor{grisfilas}
+Municipios PDET cubiertos           & 159 / 164   & 82 / 164 \\
+Área total estimada (m\textsuperscript{2})   & 216,842,560 & N/D \\
+\rowcolor{grisfilas}
+Área promedio por edificio (m\textsuperscript{2}) & 82.85  & N/D \\
+Área mínima (m\textsuperscript{2})  & 2.51        & N/D \\
+\rowcolor{grisfilas}
+Área máxima (m\textsuperscript{2})  & 20,916.70   & N/D \\
+Confianza promedio                  & 0.7795      & N/D \\
+\rowcolor{grisfilas}
+Confianza mínima                    & 0.65        & N/D \\
+Confianza máxima                    & 0.98        & N/D \\
+\bottomrule
+\multicolumn{3}{l}{\small N/D: No disponible en el dataset de Microsoft.}
+\end{tabular}
+\end{table}
+
+\textbf{Nota sobre Microsoft}: el dataset de Microsoft no incluye el campo \texttt{area\_in\_meters} en sus GeoJSON de distribución. Los valores de \texttt{height} y \texttt{confidence} registrados en los archivos descargados para Colombia presentaron valores de \texttt{-1}, indicando que no estaban disponibles para esta región en particular.
+
+\subsection{Cobertura territorial comparativa}
+
+\begin{table}[H]
+\centering
+\caption{Cobertura de municipios PDET por fuente}
+\begin{tabular}{p{7cm} r r}
+\toprule
+\tblhdr{Categoría} & \tblhdr{Municipios} & \tblhdr{\%} \\
+\midrule
+Total municipios PDET                   & 164  & 100\% \\
+\rowcolor{grisfilas}
+Con cobertura en Google                 & 159  & 96.95\% \\
+Con cobertura en Microsoft              & 82   & 50.00\% \\
+\rowcolor{grisfilas}
+En ambas fuentes                        & 80   & 48.78\% \\
+Solo en Google                          & 79   & 48.17\% \\
+\rowcolor{grisfilas}
+Solo en Microsoft                       & 2    & 1.22\% \\
+Sin cobertura en ninguna fuente         & 3    & 1.83\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La cobertura de Google Open Buildings es significativamente superior, alcanzando el \textbf{96.95\%} de los municipios PDET, frente al \textbf{50.00\%} de Microsoft. Los 5 municipios sin cobertura en Google corresponden principalmente a zonas de selva densa donde la detección satelital es más difícil. Los 3 municipios sin cobertura en ninguna fuente son: \textbf{Medio San Juan} (Chocó), \textbf{Nóvita} (Chocó) y \textbf{Sipí} (Chocó, con solo 1 edificio en Google).
+
+\subsection{Top 20 municipios por número de edificios — Google Open Buildings}
+
+\begin{longtable}{r l r r r r}
+\caption{Top 20 municipios PDET por número de edificios (Google)} \\
+\toprule
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} & \tblhdr{Confianza} \\
+\midrule
+\endfirsthead
+\toprule
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} & \tblhdr{Confianza} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+1  & Santa Marta              & 183,652 & 16,049,617 & 87.39  & 0.7748 \\
+\rowcolor{grisfilas}
+2  & Valledupar               & 171,425 & 15,392,427 & 89.79  & 0.7720 \\
+3  & Buenaventura             & 103,890 &  7,666,563 & 73.80  & 0.7803 \\
+\rowcolor{grisfilas}
+4  & Turbo                    &  78,927 &  6,047,188 & 76.62  & 0.7841 \\
+5  & Florencia                &  58,135 &  7,363,355 & 126.66 & 0.7753 \\
+\rowcolor{grisfilas}
+6  & San Andrés de Tumaco     &  50,493 &  3,778,356 & 74.83  & 0.7792 \\
+7  & Tierralta                &  43,123 &  3,087,942 & 71.61  & 0.7859 \\
+\rowcolor{grisfilas}
+8  & Ciénaga                  &  42,068 &  3,976,138 & 94.52  & 0.7683 \\
+9  & Cajibío                  &  41,281 &  2,578,859 & 62.47  & 0.7884 \\
+\rowcolor{grisfilas}
+10 & El Tambo                 &  38,900 &  2,452,837 & 63.05  & 0.7812 \\
+11 & El Carmen de Bolívar     &  38,386 &  2,552,168 & 66.49  & 0.7788 \\
+\rowcolor{grisfilas}
+12 & Apartadó                 &  36,337 &  3,606,578 & 99.25  & 0.7734 \\
+13 & Tame                     &  35,958 &  3,200,497 & 89.01  & 0.7838 \\
+\rowcolor{grisfilas}
+14 & Santander de Quilichao   &  35,691 &  3,851,789 & 107.92 & 0.7834 \\
+15 & Arauquita                &  35,077 &  2,934,442 & 83.66  & 0.7865 \\
+\rowcolor{grisfilas}
+16 & Agustín Codazzi          &  34,733 &  2,714,606 & 78.16  & 0.7847 \\
+17 & Tibú                     &  32,843 &  2,651,924 & 80.75  & 0.7893 \\
+\rowcolor{grisfilas}
+18 & San José del Guaviare    &  32,695 &  3,166,337 & 96.84  & 0.7858 \\
+19 & Necoclí                  &  32,183 &  2,344,791 & 72.86  & 0.7864 \\
+\rowcolor{grisfilas}
+20 & Morales (Cauca)          &  31,057 &  1,969,077 & 63.40  & 0.7866 \\
+\end{longtable}
+
+\subsection{Top 20 municipios por número de edificios — Microsoft Building Footprints}
+
+\begin{longtable}{r l r}
+\caption{Top 20 municipios PDET por número de edificios (Microsoft)} \\
+\toprule
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} \\
+\midrule
+\endfirsthead
+\toprule
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+1  & El Tambo                 & 34,366 \\
+\rowcolor{grisfilas}
+2  & Buenaventura             & 33,104 \\
+3  & Santander de Quilichao   & 30,842 \\
+\rowcolor{grisfilas}
+4  & San Andrés de Tumaco     & 29,307 \\
+5  & Florencia                & 26,897 \\
+\rowcolor{grisfilas}
+6  & Cajibío                  & 23,771 \\
+7  & San Vicente del Caguán   & 23,587 \\
+\rowcolor{grisfilas}
+8  & San José del Guaviare    & 21,446 \\
+9  & Puerto Asís              & 21,234 \\
+\rowcolor{grisfilas}
+10 & Orito                    & 17,840 \\
+11 & Chaparral                & 16,848 \\
+\rowcolor{grisfilas}
+12 & Morales (Cauca)          & 16,396 \\
+13 & Valle del Guamuez        & 14,349 \\
+\rowcolor{grisfilas}
+14 & Cartagena del Chairá     & 14,037 \\
+15 & La Macarena              & 12,895 \\
+\rowcolor{grisfilas}
+16 & Caldono                  & 12,546 \\
+17 & Mocoa                    & 12,229 \\
+\rowcolor{grisfilas}
+18 & Buenos Aires             & 11,444 \\
+19 & Puerto Rico (Caquetá)    & 11,430 \\
+\rowcolor{grisfilas}
+20 & Planadas                 & 11,274 \\
+\end{longtable}
+
+\subsection{Análisis comparativo entre fuentes}
+
+Para los 80 municipios con cobertura en ambas fuentes, se calculó la diferencia en el número de edificios detectados y el ratio Google/Microsoft:
+
+\begin{table}[H]
+\centering
+\caption{Comparativa de detecciones en municipios con cobertura en ambas fuentes (muestra top 10)}
+\begin{tabular}{l r r r r}
+\toprule
+\tblhdr{Municipio} & \tblhdr{Google} & \tblhdr{Microsoft} & \tblhdr{Diferencia} & \tblhdr{Ratio G/M} \\
+\midrule
+Buenaventura             & 103,890 & 33,104 & +70,786 & 3.14 \\
+\rowcolor{grisfilas}
+Florencia                &  58,135 & 26,897 & +31,238 & 2.16 \\
+San Andrés de Tumaco     &  50,493 & 29,307 & +21,186 & 1.72 \\
+\rowcolor{grisfilas}
+Cajibío                  &  41,281 & 23,771 & +17,510 & 1.74 \\
+El Tambo                 &  38,900 & 34,366 &  +4,534 & 1.13 \\
+\rowcolor{grisfilas}
+Santander de Quilichao   &  35,691 & 30,842 &  +4,849 & 1.16 \\
+San José del Guaviare    &  32,695 & 21,446 & +11,249 & 1.52 \\
+\rowcolor{grisfilas}
+Puerto Asís              &  27,581 & 21,234 &  +6,347 & 1.30 \\
+San Vicente del Caguán   &  21,599 & 23,587 &  -1,988 & 0.92 \\
+\rowcolor{grisfilas}
+Orito                    &  18,074 & 17,840 &    +234 & 1.01 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Hallazgos del análisis comparativo}
+
+\begin{itemize}[leftmargin=1.5cm]
+  \item En \textbf{76 de los 80 municipios} comunes, Google detectó más edificios que Microsoft, con un ratio promedio de \textbf{1.5x}.
+  \item En municipios como \textbf{Buenaventura} (ratio 3.14x) e \textbf{Istmina} (ratio 9.24x), la diferencia es muy pronunciada, posiblemente por mejor cobertura de imágenes satelitales de Google en zonas costeras y del Pacífico.
+  \item En \textbf{4 municipios}, Microsoft supera a Google: San Vicente del Caguán, La Macarena, Planadas y Ataco. Esto podría indicar que los cuadrantes de Microsoft tienen mejor cobertura en ciertas zonas del interior del país.
+  \item Municipios como \textbf{Orito} (ratio 1.01x) muestran resultados prácticamente idénticos entre fuentes, lo que sugiere consistencia en la detección para esa zona.
+\end{itemize}
+
+\subsection{Observaciones sobre calidad de datos}
+
+\begin{table}[H]
+\centering
+\caption{Comparación de atributos disponibles por fuente}
+\begin{tabular}{p{5cm} c c}
+\toprule
+\tblhdr{Atributo} & \tblhdr{Google} & \tblhdr{Microsoft} \\
+\midrule
+Geometría (Polygon)         & \checkmark & \checkmark \\
+\rowcolor{grisfilas}
+Área estimada (m\textsuperscript{2}) & \checkmark & \texttimes \\
+Nivel de confianza          & \checkmark & \texttimes* \\
+\rowcolor{grisfilas}
+Altura del edificio         & \texttimes & \texttimes* \\
+Código de ubicación (Plus Code) & \checkmark & \texttimes \\
+\rowcolor{grisfilas}
+Cobertura municipios PDET   & 96.95\%    & 50.00\% \\
+Total edificios en PDET     & 2,617,289  & 736,207 \\
+\bottomrule
+\multicolumn{3}{l}{\small * Los campos height y confidence de Microsoft aparecen como -1 para Colombia.}
+\end{tabular}
+\end{table}
+
+% ══════════════════════════════════════════════════════════════════════════════
+
+
 
 \end{document}
