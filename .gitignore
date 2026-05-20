@@ -31,3 +31,14 @@ __pycache__/
 # Ignore temporary files created by some editors
 *~
 *.swp
+
+# Datos generados / pesados (Recursos)
+Recursos/8e1_buildings.csv
+Recursos/8e3_buildings.csv
+Recursos/8e5_buildings.csv
+Recursos/8e7_buildings.csv
+Recursos/8e9_buildings.csv
+Recursos/8ef_buildings.csv
+
+# Todos los GeoJSON de Microsoft
+Recursos/microsoft_geojson/*.geojson

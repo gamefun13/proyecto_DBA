@@ -1,0 +1,9 @@
+pymongo
+geopandas
+shapely
+pandas
+pyproj
+matplotlib
+fiona
+rtree
+mapclassify
