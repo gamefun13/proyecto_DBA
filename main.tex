@@ -786,6 +786,281 @@ Total edificios en PDET     & 2,617,289  & 736,207 \\
 
 % ══════════════════════════════════════════════════════════════════════════════
 
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Análisis Reproducible de Rooftops y Generación de Resultados}
 
+\subsection{Objetivo del análisis}
+
+Con el fin de consolidar una metodología reproducible para el análisis del potencial solar en municipios PDET, se desarrolló el script:
+
+\begin{center}
+\texttt{02\_rooftop\_analysis.py}
+\end{center}
+
+Este componente automatiza el cálculo de:
+
+\begin{itemize}
+    \item Conteo total de edificaciones por municipio.
+    \item Área total estimada de techos.
+    \item Métricas de calidad espacial.
+    \item Exportación geoespacial en formato GeoJSON.
+    \item Generación automática de mapas temáticos.
+\end{itemize}
+
+El análisis se ejecuta directamente sobre las colecciones almacenadas en MongoDB, integrando los datasets de Google Open Buildings y Microsoft Building Footprints previamente cargados en el entorno NoSQL.
+
+\subsection{Ejecución reproducible}
+
+La ejecución del pipeline se diseñó bajo un enfoque reproducible mediante parámetros configurables desde línea de comandos:
+
+\begin{lstlisting}[language=Python, caption={Ejecución del análisis reproducible}]
+python 02_rooftop_analysis.py \
+    --mongo mongodb://localhost:27017/ \
+    --out outputs
+\end{lstlisting}
+
+Los parámetros soportados por el script son:
+
+\begin{table}[H]
+\centering
+\caption{Parámetros del análisis reproducible}
+\begin{tabular}{>{\bfseries}p{4cm} p{9cm}}
+\toprule
+\tblhdr{Parámetro} & \tblhdr{Descripción} \\
+\midrule
+\texttt{--mongo} & URI de conexión hacia MongoDB \\
+\rowcolor{grisfilas}
+\texttt{--db} & Nombre de la base de datos utilizada \\
+\texttt{--out} & Carpeta destino para exportación de resultados \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Metodología implementada}
+
+El pipeline automatizado ejecuta las siguientes etapas metodológicas:
+
+\begin{enumerate}
+    \item Carga de geometrías territoriales PDET desde MongoDB.
+    \item Carga de edificios Google y Microsoft.
+    \item Conversión de documentos GeoJSON a GeoDataFrames.
+    \item Validación geométrica de polígonos.
+    \item Cálculo de áreas en sistema métrico EPSG:9377.
+    \item Cruce espacial (\texttt{sjoin}) mediante predicado \texttt{within}.
+    \item Agregación de conteos y áreas por municipio.
+    \item Exportación de tablas CSV y capas GeoJSON.
+    \item Generación automática de mapas temáticos PNG.
+\end{enumerate}
+
+\subsection{Conversión y validación geoespacial}
+
+Para garantizar integridad espacial, cada documento almacenado en MongoDB fue convertido a objetos geométricos mediante Shapely:
+
+\begin{lstlisting}[language=Python, caption={Conversión de geometrías GeoJSON}]
+geom = d.get(geom_field) or d.get("geometria")
+g = shape(geom)
+\end{lstlisting}
+
+Durante el proceso se registraron métricas de calidad espacial:
+
+\begin{itemize}
+    \item Documentos sin geometría.
+    \item Geometrías inválidas.
+    \item Geometrías correctamente cargadas.
+    \item Edificios asignados espacialmente a municipios.
+\end{itemize}
+
+Estas métricas fueron posteriormente exportadas al archivo:
+
+\begin{center}
+\texttt{quality\_report.csv}
+\end{center}
+
+\subsection{Cálculo de áreas de techos}
+
+Las áreas fueron calculadas utilizando el sistema de referencia métrico oficial:
+
+\begin{center}
+\texttt{EPSG:9377}
+\end{center}
+
+Este CRS permite obtener superficies precisas en metros cuadrados para análisis de potencial solar.
+
+\begin{lstlisting}[language=Python, caption={Cálculo de áreas en CRS métrico}]
+gdf_metric = gdf.to_crs(epsg=9377)
+geom_areas = gdf_metric.geometry.area.round(2)
+\end{lstlisting}
+
+Cuando el dataset de Google ya contenía el atributo \texttt{area\_estimada\_m2}, el pipeline reutilizaba dicho valor para evitar reprocesamiento innecesario.
+
+\clearpage
+\subsection{Cruce espacial y asignación municipal}
+
+La asignación territorial se realizó mediante operaciones espaciales vectorizadas utilizando GeoPandas:
+
+\begin{lstlisting}[language=Python, caption={Asignación espacial mediante sjoin}]
+gg = gdf_google.sjoin(
+    gdf_mun[
+        ["codigo_mgn", "nombre_municipio", "geometry"]
+    ],
+    how="left",
+    predicate="within"
+)
+\end{lstlisting}
+
+El uso del predicado \texttt{within} garantiza que únicamente los edificios completamente contenidos dentro de municipios PDET sean contabilizados.
+
+\subsection{Agregación de resultados}
+
+Posteriormente se realizaron agregaciones estadísticas para calcular:
+
+\begin{itemize}
+    \item Número total de edificios por municipio.
+    \item Área total acumulada de techos.
+    \item Resultados separados por fuente.
+    \item Totales consolidados Google + Microsoft.
+\end{itemize}
+
+\begin{lstlisting}[language=Python, caption={Agregación por municipio}]
+df.groupby(
+    ["codigo_mgn_mun", "nombre_municipio_mun"]
+).agg(
+    n_edificios=("geometry", "count"),
+    area_total_m2=("area_m2", "sum")
+)
+\end{lstlisting}
+
+\subsection{Exportación de resultados}
+
+El pipeline exporta automáticamente múltiples salidas para análisis posteriores:
+
+\begin{table}[H]
+\centering
+\caption{Archivos generados por el pipeline reproducible}
+\begin{tabular}{>{\bfseries}p{5cm} p{8cm}}
+\toprule
+\tblhdr{Archivo} & \tblhdr{Contenido} \\
+\midrule
+\texttt{rooftop\_by\_municipio\_fuente.csv} & Conteos y áreas por municipio y fuente \\
+\rowcolor{grisfilas}
+\texttt{rooftop\_by\_municipio.csv} & Totales agregados por municipio \\
+\texttt{quality\_report.csv} & Métricas de calidad espacial \\
+\rowcolor{grisfilas}
+\texttt{municipios\_rooftop.geojson} & Capa geoespacial enriquecida \\
+\texttt{mapa\_rooftop.png} & Mapa temático de edificaciones PDET \\
+\rowcolor{grisfilas}
+\texttt{run\_metadata.json} & Metadatos metodológicos y versiones \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Generación automática de mapas}
+
+Como parte del análisis reproducible, el script genera automáticamente mapas coropléticos utilizando Matplotlib y GeoPandas.
+
+\begin{lstlisting}[language=Python, caption={Generación automática de mapa temático}]
+gdf_mun2.plot(
+    column="total_edificios",
+    ax=ax,
+    legend=True,
+    cmap="OrRd"
+)
+\end{lstlisting}
+
+La Figura~\ref{fig:mapa_rooftop} presenta el resultado final generado automáticamente por el pipeline.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.78\linewidth]{Imagenes/mapa_rooftop.png}
+    \caption{Mapa temático generado automáticamente por el pipeline reproducible. La visualización representa el total de edificaciones detectadas por municipio PDET tras la integración de datasets geoespaciales.}
+    \label{fig:mapa_rooftop}
+\end{figure}
+
+\subsection{Metadatos y reproducibilidad}
+
+Con el objetivo de asegurar trazabilidad y reproducibilidad científica, cada ejecución genera automáticamente un archivo:
+
+\begin{center}
+\texttt{run\_metadata.json}
+\end{center}
+
+Este archivo almacena:
+
+\begin{itemize}
+    \item Fecha y hora UTC de ejecución.
+    \item Parámetros utilizados.
+    \item Versiones de librerías geoespaciales.
+    \item Número de geometrías procesadas.
+    \item Metodología aplicada.
+\end{itemize}
+
+Un extracto del archivo generado se muestra a continuación:
+
+\begin{lstlisting}[language=Python, caption={Metadatos de ejecución reproducible}]
+{
+  "analysis": "Rooftop Count and Area Estimation",
+  "parameters": {
+    "spatial_join_predicate": "within",
+    "area_crs_epsg": 9377
+  },
+  "inputs": {
+    "municipios_pdet": 164,
+    "google_geometrias_cargadas": 2617289,
+    "microsoft_geometrias_cargadas": 824605
+  }
+}
+\end{lstlisting}
+
+\subsection{Resultados generales del análisis}
+
+La ejecución del pipeline permitió consolidar información geoespacial reproducible sobre el potencial de techos en municipios PDET.
+
+Los principales resultados obtenidos incluyen:
+
+\begin{itemize}
+    \item Procesamiento de más de 3.4 millones de geometrías de edificios.
+    \item Integración automática entre Google Open Buildings y Microsoft Building Footprints.
+    \item Generación de estadísticas territoriales consolidadas.
+    \item Producción automática de capas geoespaciales compatibles con QGIS y MongoDB.
+    \item Validación espacial reproducible mediante métricas cuantitativas.
+\end{itemize}
+
+Estos resultados constituyen la base para futuros análisis de potencial fotovoltaico y planeación energética territorial dentro del marco PDET.
+
+\subsection{Hallazgos territoriales del análisis de rooftops}
+
+El análisis reproducible permitió identificar diferencias significativas en la distribución territorial de edificaciones dentro de los municipios PDET.
+
+A partir de los resultados agregados obtenidos en:
+
+\begin{center}
+\texttt{rooftop\_by\_municipio.csv}
+\end{center}
+
+se evidenció que los municipios con mayor concentración de edificaciones corresponden principalmente a territorios con mayor densidad urbana y actividad económica regional.
+
+Entre los principales hallazgos obtenidos se destacan:
+
+\begin{itemize}
+
+    \item \textbf{Alta concentración de edificaciones en zonas urbanas consolidadas}: municipios como Santa Marta, Valledupar y Buenaventura presentaron los mayores conteos de edificaciones detectadas dentro de territorios PDET.
+
+    \item \textbf{Distribución desigual del área total de techos}: aunque algunos municipios presentan menos edificaciones, el área promedio de techos es significativamente mayor, indicando presencia de construcciones de gran tamaño o baja densidad urbana.
+
+    \item \textbf{Cobertura territorial heterogénea}: los municipios ubicados en regiones selváticas del Pacífico y Amazonía presentaron menores densidades de detección, lo cual coincide con limitaciones de visibilidad satelital y dispersión poblacional.
+
+    \item \textbf{Mayor cobertura del dataset de Google}: Google Open Buildings logró detectar una cantidad considerablemente superior de edificaciones frente a Microsoft Building Footprints en la mayoría de municipios analizados.
+
+    \item \textbf{Consistencia espacial}: la tasa de asignación territorial obtenida mediante operaciones espaciales \texttt{within} confirmó una alta coherencia entre las geometrías de edificios y los límites municipales PDET.
+
+\end{itemize}
+
+\vspace{0.3cm}
+
+El análisis de áreas acumuladas permitió además estimar de manera preliminar el potencial de superficie disponible para futuras instalaciones fotovoltaicas distribuidas.
+
+Los resultados muestran que municipios con alta concentración de edificaciones también presentan una elevada disponibilidad de área útil de techos, convirtiéndose en candidatos estratégicos para iniciativas de transición energética y generación solar descentralizada.
+
+Adicionalmente, el uso de métricas reproducibles y exportaciones geoespaciales en formatos abiertos facilita futuras etapas de modelamiento energético, simulación fotovoltaica y priorización territorial por parte de entidades gubernamentales como la UPME.
 
 \end{document}
