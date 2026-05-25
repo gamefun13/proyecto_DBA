@@ -22,7 +22,7 @@ El comando `use proyecto` crea la base de datos llamada `proyecto` si todavía n
 Ejecuta los scripts en este orden:
 
 1. `01_cargar_pdet_mongodb.py`
-	- Cambia la ruta de `GEOJSON_PATH` para que apunte a `pdet_final.geojson`.
+	- El script ya toma `pdet_final.geojson` desde la misma carpeta.
 2. `script.py`
 	- Verifica que los archivos `8e7_buildings.csv` y los demás CSV de edificios estén en la misma carpeta.
 3. `microsoftB.py`

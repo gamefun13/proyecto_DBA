@@ -16,6 +16,8 @@ Uso:
 """
 
 import logging
+from pathlib import Path
+
 import geopandas as gpd
 from pymongo import MongoClient, GEOSPHERE
 
@@ -26,7 +28,7 @@ log = logging.getLogger(__name__)
 MONGO_URI    = "mongodb://localhost:27017/"
 DB_NAME      = "proyecto"
 COLLECTION   = "territorios_pdet"
-GEOJSON_PATH = "C:\\Users\\danie\\Desktop\\ProyectoDBA\\proyecto_DBA\\Recursos\\pdet_final.geojson"   # Generado en Semana 2
+GEOJSON_PATH = Path(__file__).with_name("pdet_final.geojson")
 
 
 # ─── Funciones ──────────────────────────────────────────────────────────────────
