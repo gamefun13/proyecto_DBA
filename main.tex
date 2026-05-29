@@ -11,6 +11,7 @@
 % Useful packages
 \PassOptionsToPackage{colorlinks=true,allcolors=blue}{hyperref}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{graphicx}
 \graphicspath{{Imagenes/}}
 \usepackage{float}
@@ -362,7 +363,7 @@ Durante la ejecución del pipeline geoespacial se obtuvieron resultados de valid
 Cruce por código DANE: encontrados 170 registros.
 
 --- RESULTADOS ---
-Municipios cargados del SHP: 1123
+Municipios cargados del SHP: 1122
 Municipios en tu lista PDET: 170
 Municipios PDET encontrados tras el cruce: 170
 
@@ -488,10 +489,10 @@ Los datos fueron almacenados en tres colecciones dentro de la base de datos \tex
 \toprule
 \tblhdr{Colección} & \tblhdr{Documentos} & \tblhdr{Propósito} \\
 \midrule
-\texttt{territorios\_pdet}   & 164         & Límites municipales PDET \\
+\texttt{territorios\_pdet}   & 170         & Límites municipales PDET \\
 \rowcolor{grisfilas}
-\texttt{google\_buildings}   & 2,617,289   & Huellas de edificios (Google) \\
-\texttt{microsoft\_buildings} & 736,207    & Huellas de edificios (Microsoft) \\
+\texttt{google\_buildings}   & 2,686,933   & Huellas de edificios (Google) \\
+\texttt{microsoft\_buildings} & 1,537,288  & Huellas de edificios (Microsoft) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -540,33 +541,27 @@ col.create_index("codigo_mgn", name="idx_codigo_mgn")
 Un paso crítico en el pipeline de carga fue el cruce espacial entre cada edificio y los polígonos PDET. Solo se insertaron en MongoDB los edificios cuyo centroide cayera \textit{dentro} de algún municipio PDET. Este filtro se implementó de dos formas según la fuente:
 
 \begin{itemize}[leftmargin=1.5cm]
-  \item \textbf{Google}: uso de \texttt{STRtree} de Shapely para consulta espacial eficiente con \texttt{tree.query()} y validación con \texttt{contains()}.
-  \item \textbf{Microsoft}: uso de \texttt{geopandas.sjoin()} vectorizado con predicado \texttt{within}, procesando todos los edificios de un cuadrante simultáneamente.
+    \item \textbf{Google}: lectura por lotes de archivos CSV, conversión de geometrías WKT a objetos Shapely, uso de \texttt{STRtree} para consulta espacial eficiente y validación mediante el centroide de cada huella contra los polígonos PDET.
+    \item \textbf{Microsoft}: lectura de archivos GeoJSON por cuadrante, reparación y validación de geometrías poligonales, asignación municipal mediante el centroide de cada edificio y limpieza posterior de geometrías incompatibles con índices \texttt{2dsphere}.
 \end{itemize}
+
+Aunque MongoDB permite ejecutar consultas espaciales mediante operadores como \texttt{\$geoWithin} y \texttt{\$geoIntersects}, en el pipeline final se decidió almacenar el campo \texttt{codigo\_mgn} directamente en cada edificio durante la carga. Esta decisión reduce el costo de las agregaciones posteriores, ya que evita repetir cruces espaciales sobre millones de geometrías en cada consulta.
 
 \subsection{Eficiencia de carga}
 
-Para garantizar una carga eficiente de grandes volúmenes de datos, se implementó escritura por lotes (\textit{bulk write}) con un tamaño de lote de 2,000 documentos:
+Para garantizar una carga eficiente de grandes volúmenes de datos, se implementó escritura por lotes con un tamaño de lote de 20,000 documentos. Además, los índices espaciales fueron creados al final de la carga para evitar que MongoDB actualizara los índices durante cada inserción masiva.
 
-\begin{lstlisting}[language=Python, caption={Inserción por lotes con bulk\_write}]
-batch.append(InsertOne(doc))
-                count += 1
+\begin{lstlisting}[language=Python, caption={Inserción por lotes optimizada}]
+BATCH_SIZE = 20_000
 
-                if len(batch) >= BATCH_SIZE:
-                    col.bulk_write(batch, ordered=False)
-                    batch = []
+batch.append(doc)
 
-            except Exception as e:
-                log.debug(f"  Feature omitida por error: {e}")
-                omitidos += 1
-                continue
+if len(batch) >= BATCH_SIZE:
+    col.insert_many(batch, ordered=False)
+    batch = []
 
-        if batch:
-            col.bulk_write(batch, ordered=False)
-
-        log.info(f"  -> {count:,} edificios PDET insertados | {omitidos:,} omitidos (fuera de PDET o invalidos)")
-        total_global    += count
-        omitidos_global += omitidos
+if batch:
+    col.insert_many(batch, ordered=False)
 \end{lstlisting}
 
 El parámetro \texttt{ordered=False} permite que MongoDB procese las inserciones en paralelo, mejorando el rendimiento y tolerando errores individuales sin detener el proceso completo.
@@ -579,151 +574,158 @@ Tras completar la carga de ambos datasets, se realizó un análisis exploratorio
 
 \begin{table}[H]
 \centering
-\caption{Resumen general de edificios cargados por fuente}
-\begin{tabular}{p{5cm} r r}
+\caption{Resumen general de edificios cargados y consolidación final}
+\begin{tabular}{p{8cm} r}
 \toprule
-\tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
+\tblhdr{Métrica} & \tblhdr{Valor} \\
 \midrule
-Total de edificios                  & 2,617,289   & 736,207 \\
+Municipios PDET cargados & 170 \\
 \rowcolor{grisfilas}
-Municipios PDET cubiertos           & 159 / 164   & 82 / 164 \\
-Área total estimada (m\textsuperscript{2})   & 216,842,560 & N/D \\
+Edificios Google cargados & 2,686,933 \\
+Edificios Microsoft cargados después de limpieza geométrica & 1,537,288 \\
 \rowcolor{grisfilas}
-Área promedio por edificio (m\textsuperscript{2}) & 82.85  & N/D \\
-Área mínima (m\textsuperscript{2})  & 2.51        & N/D \\
+Total de huellas procesadas en ambas fuentes & 4,224,221 \\
+Duplicados Microsoft-Google detectados & 764,327 \\
 \rowcolor{grisfilas}
-Área máxima (m\textsuperscript{2})  & 20,916.70   & N/D \\
-Confianza promedio                  & 0.7795      & N/D \\
+Edificios Microsoft únicos agregados & 772,961 \\
+Total final de edificios sin duplicados & 3,459,894 \\
 \rowcolor{grisfilas}
-Confianza mínima                    & 0.65        & N/D \\
-Confianza máxima                    & 0.98        & N/D \\
+Área total de techos sin duplicados (m\textsuperscript{2}) & 282,081,655.68 \\
 \bottomrule
-\multicolumn{3}{l}{\small N/D: No disponible en el dataset de Microsoft.}
 \end{tabular}
 \end{table}
 
 \textbf{Nota sobre Microsoft}: el dataset de Microsoft no incluye el campo \texttt{area\_in\_meters} en sus GeoJSON de distribución. Los valores de \texttt{height} y \texttt{confidence} registrados en los archivos descargados para Colombia presentaron valores de \texttt{-1}, indicando que no estaban disponibles para esta región en particular.
 
+Debido a la ausencia de un atributo de área directamente comparable en Microsoft, el área de techos para esta fuente fue calculada geométricamente a partir de las huellas proyectadas al sistema de referencia métrico \texttt{EPSG:9377}. Para mantener consistencia metodológica, el análisis final también calculó áreas geométricas sobre las huellas consolidadas.
+
 \subsection{Cobertura territorial comparativa}
+
+La cobertura territorial se evaluó sobre los \textbf{170 municipios PDET} cargados en la colección \texttt{territorios\_pdet}. Para cada municipio se calcularon conteos separados por fuente y un resultado consolidado sin duplicados.
+
+La estrategia final no consistió únicamente en sumar las detecciones de Google y Microsoft. En cambio, se compararon espacialmente las huellas de ambas fuentes para identificar posibles duplicados. Cuando una huella de Microsoft presentaba un solapamiento significativo con una huella de Google, se consideró duplicada y no se agregó al resultado final.
+
+La regla de deduplicación utilizada fue:
+
+\[
+\frac{\text{Área de intersección}}{\min(\text{Área Google}, \text{Área Microsoft})} \geq 0.50
+\]
+
+Bajo esta regla, Google se conservó como fuente prioritaria y Microsoft se utilizó como fuente complementaria para agregar únicamente edificios no detectados por Google.
 
 \begin{table}[H]
 \centering
-\caption{Cobertura de municipios PDET por fuente}
-\begin{tabular}{p{7cm} r r}
+\caption{Consolidación entre fuentes después de deduplicación espacial}
+\begin{tabular}{p{8cm} r}
 \toprule
-\tblhdr{Categoría} & \tblhdr{Municipios} & \tblhdr{\%} \\
+\tblhdr{Categoría} & \tblhdr{Edificios} \\
 \midrule
-Total municipios PDET                   & 164  & 100\% \\
+Google Open Buildings & 2,686,933 \\
 \rowcolor{grisfilas}
-Con cobertura en Google                 & 159  & 96.95\% \\
-Con cobertura en Microsoft              & 82   & 50.00\% \\
+Microsoft Building Footprints original & 1,537,288 \\
+Duplicados Microsoft-Google & 764,327 \\
 \rowcolor{grisfilas}
-En ambas fuentes                        & 80   & 48.78\% \\
-Solo en Google                          & 79   & 48.17\% \\
-\rowcolor{grisfilas}
-Solo en Microsoft                       & 2    & 1.22\% \\
-Sin cobertura en ninguna fuente         & 3    & 1.83\% \\
+Microsoft únicos agregados & 772,961 \\
+Total final sin duplicados & 3,459,894 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-La cobertura de Google Open Buildings es significativamente superior, alcanzando el \textbf{96.95\%} de los municipios PDET, frente al \textbf{50.00\%} de Microsoft. Los 5 municipios sin cobertura en Google corresponden principalmente a zonas de selva densa donde la detección satelital es más difícil. Los 3 municipios sin cobertura en ninguna fuente son: \textbf{Medio San Juan} (Chocó), \textbf{Nóvita} (Chocó) y \textbf{Sipí} (Chocó, con solo 1 edificio en Google).
-
 \subsection{Top 20 municipios por número de edificios — Google Open Buildings}
 
-\begin{longtable}{r l r r r r}
-\caption{Top 20 municipios PDET por número de edificios (Google)} \\
+\begin{longtable}{r l r r r}
+\caption{Top 20 municipios PDET por número de edificios (Google, versión final)} \\
 \toprule
-\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} & \tblhdr{Confianza} \\
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} \\
 \midrule
 \endfirsthead
 \toprule
-\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} & \tblhdr{Confianza} \\
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} & \tblhdr{Área Prom. (m\textsuperscript{2})} \\
 \midrule
 \endhead
 \bottomrule
 \endfoot
-1  & Santa Marta              & 183,652 & 16,049,617 & 87.39  & 0.7748 \\
+1  & SANTA MARTA              & 183,652 & 15,966,845.25 & 86.94 \\
 \rowcolor{grisfilas}
-2  & Valledupar               & 171,425 & 15,392,427 & 89.79  & 0.7720 \\
-3  & Buenaventura             & 103,890 &  7,666,563 & 73.80  & 0.7803 \\
+2  & VALLEDUPAR               & 171,425 & 15,306,269.53 & 89.29 \\
+3  & BUENAVENTURA             & 103,890 & 7,658,352.05  & 73.72 \\
 \rowcolor{grisfilas}
-4  & Turbo                    &  78,927 &  6,047,188 & 76.62  & 0.7841 \\
-5  & Florencia                &  58,135 &  7,363,355 & 126.66 & 0.7753 \\
+4  & TURBO                    & 78,927  & 6,036,411.11  & 76.48 \\
+5  & FLORENCIA                & 58,135  & 7,334,010.74  & 126.15 \\
 \rowcolor{grisfilas}
-6  & San Andrés de Tumaco     &  50,493 &  3,778,356 & 74.83  & 0.7792 \\
-7  & Tierralta                &  43,123 &  3,087,942 & 71.61  & 0.7859 \\
+6  & SAN ANDRES DE TUMACO     & 50,493  & 3,793,315.73  & 75.13 \\
+7  & TIERRALTA                & 43,123  & 3,078,702.71  & 71.39 \\
 \rowcolor{grisfilas}
-8  & Ciénaga                  &  42,068 &  3,976,138 & 94.52  & 0.7683 \\
-9  & Cajibío                  &  41,281 &  2,578,859 & 62.47  & 0.7884 \\
+8  & CIENAGA                  & 42,068  & 3,955,667.01  & 94.03 \\
+9  & CAJIBIO                  & 41,281  & 2,573,777.82  & 62.35 \\
 \rowcolor{grisfilas}
-10 & El Tambo                 &  38,900 &  2,452,837 & 63.05  & 0.7812 \\
-11 & El Carmen de Bolívar     &  38,386 &  2,552,168 & 66.49  & 0.7788 \\
+10 & EL TAMBO                 & 38,900  & 2,449,152.18  & 62.96 \\
+11 & EL CARMEN DE BOLIVAR     & 38,386  & 2,541,160.53  & 66.20 \\
 \rowcolor{grisfilas}
-12 & Apartadó                 &  36,337 &  3,606,578 & 99.25  & 0.7734 \\
-13 & Tame                     &  35,958 &  3,200,497 & 89.01  & 0.7838 \\
+12 & APARTADO                 & 36,337  & 3,599,828.36  & 99.07 \\
+13 & TAME                     & 35,958  & 3,183,325.12  & 88.53 \\
 \rowcolor{grisfilas}
-14 & Santander de Quilichao   &  35,691 &  3,851,789 & 107.92 & 0.7834 \\
-15 & Arauquita                &  35,077 &  2,934,442 & 83.66  & 0.7865 \\
+14 & SANTANDER DE QUILICHAO   & 35,691  & 3,842,935.10  & 107.67 \\
+15 & ARAUQUITA                & 35,077  & 2,919,565.44  & 83.23 \\
 \rowcolor{grisfilas}
-16 & Agustín Codazzi          &  34,733 &  2,714,606 & 78.16  & 0.7847 \\
-17 & Tibú                     &  32,843 &  2,651,924 & 80.75  & 0.7893 \\
+16 & AGUSTIN CODAZZI          & 34,733  & 2,699,284.28  & 77.72 \\
+17 & TIBU                     & 32,843  & 2,636,703.11  & 80.28 \\
 \rowcolor{grisfilas}
-18 & San José del Guaviare    &  32,695 &  3,166,337 & 96.84  & 0.7858 \\
-19 & Necoclí                  &  32,183 &  2,344,791 & 72.86  & 0.7864 \\
+18 & SAN JOSE DEL GUAVIARE    & 32,695  & 3,147,419.35  & 96.27 \\
+19 & NECOCLI                  & 32,183  & 2,340,769.38  & 72.73 \\
 \rowcolor{grisfilas}
-20 & Morales (Cauca)          &  31,057 &  1,969,077 & 63.40  & 0.7866 \\
+20 & MORALES                  & 31,057  & 1,965,301.82  & 63.28 \\
 \end{longtable}
 
 \subsection{Top 20 municipios por número de edificios — Microsoft Building Footprints}
 
-\begin{longtable}{r l r}
-\caption{Top 20 municipios PDET por número de edificios (Microsoft)} \\
+\begin{longtable}{r l r r}
+\caption{Top 20 municipios PDET por número de edificios (Microsoft, versión final)} \\
 \toprule
-\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} \\
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} \\
 \midrule
 \endfirsthead
 \toprule
-\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} \\
+\tblhdr{\#} & \tblhdr{Municipio} & \tblhdr{Edificios} & \tblhdr{Área Total (m\textsuperscript{2})} \\
 \midrule
 \endhead
 \bottomrule
 \endfoot
-1  & El Tambo                 & 34,366 \\
+1  & SANTA MARTA              & 67,663 & 14,207,992.34 \\
 \rowcolor{grisfilas}
-2  & Buenaventura             & 33,104 \\
-3  & Santander de Quilichao   & 30,842 \\
+2  & SAN ANDRES DE TUMACO     & 41,423 & 4,524,735.40 \\
+3  & TIBU                     & 35,478 & 3,569,509.95 \\
 \rowcolor{grisfilas}
-4  & San Andrés de Tumaco     & 29,307 \\
-5  & Florencia                & 26,897 \\
+4  & EL TAMBO                 & 34,366 & 3,051,941.00 \\
+5  & BUENAVENTURA             & 33,020 & 7,138,217.08 \\
 \rowcolor{grisfilas}
-6  & Cajibío                  & 23,771 \\
-7  & San Vicente del Caguán   & 23,587 \\
+6  & SANTANDER DE QUILICHAO   & 30,841 & 4,234,663.51 \\
+7  & TURBO                    & 28,240 & 3,189,172.78 \\
 \rowcolor{grisfilas}
-8  & San José del Guaviare    & 21,446 \\
-9  & Puerto Asís              & 21,234 \\
+8  & ARAUQUITA                & 27,815 & 3,317,209.87 \\
+9  & FLORENCIA                & 26,896 & 6,683,829.91 \\
 \rowcolor{grisfilas}
-10 & Orito                    & 17,840 \\
-11 & Chaparral                & 16,848 \\
+10 & EL CARMEN DE BOLIVAR     & 24,235 & 2,189,240.20 \\
+11 & CAJIBIO                  & 23,771 & 2,270,334.69 \\
 \rowcolor{grisfilas}
-12 & Morales (Cauca)          & 16,396 \\
-13 & Valle del Guamuez        & 14,349 \\
+12 & SAN VICENTE DEL CAGUAN   & 23,587 & 3,756,489.48 \\
+13 & CIENAGA                  & 21,990 & 3,473,952.89 \\
 \rowcolor{grisfilas}
-14 & Cartagena del Chairá     & 14,037 \\
-15 & La Macarena              & 12,895 \\
+14 & SAN JOSE DEL GUAVIARE    & 21,446 & 3,099,880.81 \\
+15 & PUERTO ASIS              & 21,234 & 3,056,417.43 \\
 \rowcolor{grisfilas}
-16 & Caldono                  & 12,546 \\
-17 & Mocoa                    & 12,229 \\
+16 & TAME                     & 20,958 & 2,761,029.83 \\
+17 & MONTELIBANO              & 18,723 & 2,498,713.98 \\
 \rowcolor{grisfilas}
-18 & Buenos Aires             & 11,444 \\
-19 & Puerto Rico (Caquetá)    & 11,430 \\
+18 & ORITO                    & 17,840 & 2,029,245.49 \\
+19 & SAN ONOFRE               & 17,348 & 1,490,877.96 \\
 \rowcolor{grisfilas}
-20 & Planadas                 & 11,274 \\
+20 & CHAPARRAL                & 16,849 & 1,974,276.54 \\
 \end{longtable}
 
 \subsection{Análisis comparativo entre fuentes}
 
-Para los 80 municipios con cobertura en ambas fuentes, se calculó la diferencia en el número de edificios detectados y el ratio Google/Microsoft:
+Para los 168 municipios con cobertura en ambas fuentes, se calculó la diferencia en el número de edificios detectados y el ratio Google/Microsoft:
 
 \begin{table}[H]
 \centering
@@ -732,21 +734,21 @@ Para los 80 municipios con cobertura en ambas fuentes, se calculó la diferencia
 \toprule
 \tblhdr{Municipio} & \tblhdr{Google} & \tblhdr{Microsoft} & \tblhdr{Diferencia} & \tblhdr{Ratio G/M} \\
 \midrule
-Buenaventura             & 103,890 & 33,104 & +70,786 & 3.14 \\
+VALLEDUPAR               & 171,425 & 14,969 & +156,456 & 11.45 \\
 \rowcolor{grisfilas}
-Florencia                &  58,135 & 26,897 & +31,238 & 2.16 \\
-San Andrés de Tumaco     &  50,493 & 29,307 & +21,186 & 1.72 \\
+SANTA MARTA              & 183,652 & 67,663 & +115,989 & 2.71 \\
+BUENAVENTURA             & 103,890 & 33,020 & +70,870  & 3.15 \\
 \rowcolor{grisfilas}
-Cajibío                  &  41,281 & 23,771 & +17,510 & 1.74 \\
-El Tambo                 &  38,900 & 34,366 &  +4,534 & 1.13 \\
+TURBO                    & 78,927  & 28,240 & +50,687  & 2.79 \\
+TIERRALTA                & 43,123  & 4,190  & +38,933  & 10.29 \\
 \rowcolor{grisfilas}
-Santander de Quilichao   &  35,691 & 30,842 &  +4,849 & 1.16 \\
-San José del Guaviare    &  32,695 & 21,446 & +11,249 & 1.52 \\
+APARTADO                 & 36,337  & 2,652  & +33,685  & 13.70 \\
+AGUSTIN CODAZZI          & 34,733  & 2,575  & +32,158  & 13.49 \\
 \rowcolor{grisfilas}
-Puerto Asís              &  27,581 & 21,234 &  +6,347 & 1.30 \\
-San Vicente del Caguán   &  21,599 & 23,587 &  -1,988 & 0.92 \\
+FLORENCIA                & 58,135  & 26,896 & +31,239  & 2.16 \\
+NECOCLI                  & 32,183  & 10,119 & +22,064  & 3.18 \\
 \rowcolor{grisfilas}
-Orito                    &  18,074 & 17,840 &    +234 & 1.01 \\
+CIENAGA                  & 42,068  & 21,990 & +20,078  & 1.91 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -754,10 +756,10 @@ Orito                    &  18,074 & 17,840 &    +234 & 1.01 \\
 \subsubsection{Hallazgos del análisis comparativo}
 
 \begin{itemize}[leftmargin=1.5cm]
-  \item En \textbf{76 de los 80 municipios} comunes, Google detectó más edificios que Microsoft, con un ratio promedio de \textbf{1.5x}.
-  \item En municipios como \textbf{Buenaventura} (ratio 3.14x) e \textbf{Istmina} (ratio 9.24x), la diferencia es muy pronunciada, posiblemente por mejor cobertura de imágenes satelitales de Google en zonas costeras y del Pacífico.
-  \item En \textbf{4 municipios}, Microsoft supera a Google: San Vicente del Caguán, La Macarena, Planadas y Ataco. Esto podría indicar que los cuadrantes de Microsoft tienen mejor cobertura en ciertas zonas del interior del país.
-  \item Municipios como \textbf{Orito} (ratio 1.01x) muestran resultados prácticamente idénticos entre fuentes, lo que sugiere consistencia en la detección para esa zona.
+    \item En \textbf{131 de los 168 municipios} comunes, Google detectó más edificios que Microsoft. La razón Google/Microsoft presenta una mediana cercana a \textbf{1.42x}.
+    \item En municipios como \textbf{Valledupar} (ratio 11.45x) y \textbf{Tierralta} (ratio 10.29x), la diferencia es pronunciada, lo cual puede explicarse por diferencias en cobertura de imágenes, fechas de captura y criterios de detección entre fuentes.
+    \item En \textbf{36 municipios}, Microsoft supera a Google (por ejemplo \textbf{Ataco}, \textbf{López} y \textbf{Rioblanco}), lo que evidencia que Microsoft aporta detecciones únicas en zonas donde Google presenta menor cobertura o mayor subdetección.
+    \item La consolidación final no se basa en elegir una única fuente, sino en \textbf{deduplicar espacialmente} y conservar Google como fuente prioritaria, agregando únicamente huellas de Microsoft no solapadas significativamente.
 \end{itemize}
 
 \subsection{Observaciones sobre calidad de datos}
@@ -777,8 +779,8 @@ Nivel de confianza          & \checkmark & \texttimes* \\
 Altura del edificio         & \texttimes & \texttimes* \\
 Código de ubicación (Plus Code) & \checkmark & \texttimes \\
 \rowcolor{grisfilas}
-Cobertura municipios PDET   & 96.95\%    & 50.00\% \\
-Total edificios en PDET     & 2,617,289  & 736,207 \\
+Municipios PDET analizados   & 170    & 170 \\
+Total edificios cargados     & 2,686,933  & 1,537,288 \\
 \bottomrule
 \multicolumn{3}{l}{\small * Los campos height y confidence de Microsoft aparecen como -1 para Colombia.}
 \end{tabular}
@@ -846,10 +848,11 @@ El pipeline automatizado ejecuta las siguientes etapas metodológicas:
     \item Conversión de documentos GeoJSON a GeoDataFrames.
     \item Validación geométrica de polígonos.
     \item Cálculo de áreas en sistema métrico EPSG:9377.
-    \item Cruce espacial (\texttt{sjoin}) mediante predicado \texttt{within}.
-    \item Agregación de conteos y áreas por municipio.
-    \item Exportación de tablas CSV y capas GeoJSON.
-    \item Generación automática de mapas temáticos PNG.
+    \item Comparación espacial entre huellas de Google y Microsoft.
+    \item Identificación de duplicados mediante razón de solapamiento geométrico.
+    \item Consolidación final sin doble conteo, conservando Google como fuente prioritaria.
+    \item Agregación de conteos y áreas finales por municipio.
+    \item Exportación de tablas CSV, capas GeoJSON y mapas PNG.
 \end{enumerate}
 
 \subsection{Conversión y validación geoespacial}
@@ -896,19 +899,18 @@ Cuando el dataset de Google ya contenía el atributo \texttt{area\_estimada\_m2}
 \clearpage
 \subsection{Cruce espacial y asignación municipal}
 
-La asignación territorial se realizó mediante operaciones espaciales vectorizadas utilizando GeoPandas:
+La asignación territorial de los edificios se realizó previamente durante los scripts de carga, almacenando en cada documento el campo \texttt{codigo\_mgn}. Posteriormente, el análisis reproducible utilizó este código para procesar municipio por municipio, reduciendo el costo computacional de las agregaciones.
 
-\begin{lstlisting}[language=Python, caption={Asignación espacial mediante sjoin}]
-gg = gdf_google.sjoin(
-    gdf_mun[
-        ["codigo_mgn", "nombre_municipio", "geometry"]
-    ],
-    how="left",
-    predicate="within"
-)
+La comparación entre Google y Microsoft se realizó en coordenadas proyectadas, utilizando el sistema \texttt{EPSG:9377}, con el fin de calcular correctamente áreas de intersección y áreas de techos en metros cuadrados.
+
+\begin{lstlisting}[language=Python, caption={Regla de deduplicación espacial}]
+overlap_ratio = area_interseccion / min(area_google, area_microsoft)
+
+if overlap_ratio >= 0.50:
+    duplicado_google = True
+else:
+    duplicado_google = False
 \end{lstlisting}
-
-El uso del predicado \texttt{within} garantiza que únicamente los edificios completamente contenidos dentro de municipios PDET sean contabilizados.
 
 \subsection{Agregación de resultados}
 
@@ -918,15 +920,29 @@ Posteriormente se realizaron agregaciones estadísticas para calcular:
     \item Número total de edificios por municipio.
     \item Área total acumulada de techos.
     \item Resultados separados por fuente.
-    \item Totales consolidados Google + Microsoft.
+    \item Resultado consolidado sin duplicados entre Google y Microsoft.
 \end{itemize}
 
-\begin{lstlisting}[language=Python, caption={Agregación por municipio}]
-df.groupby(
-    ["codigo_mgn_mun", "nombre_municipio_mun"]
+\[
+\text{Total final sin duplicados}
+=
+\text{Google}
++
+(\text{Microsoft} - \text{Duplicados Microsoft-Google})
+\]
+
+En la ejecución final, esta fórmula produjo:
+
+\[
+3,459,894 = 2,686,933 + (1,537,288 - 764,327)
+\]
+
+\begin{lstlisting}[language=Python, caption={Agregación por municipio (resultado final)}]
+df_municipio = df.groupby(
+    ["codigo_mgn", "nombre_municipio"]
 ).agg(
-    n_edificios=("geometry", "count"),
-    area_total_m2=("area_m2", "sum")
+    total_edificios_sin_duplicados=("total_edificios_sin_duplicados", "sum"),
+    total_area_m2_sin_duplicados=("total_area_m2_sin_duplicados", "sum")
 )
 \end{lstlisting}
 
@@ -936,20 +952,21 @@ El pipeline exporta automáticamente múltiples salidas para análisis posterior
 
 \begin{table}[H]
 \centering
-\caption{Archivos generados por el pipeline reproducible}
-\begin{tabular}{>{\bfseries}p{5cm} p{8cm}}
+\caption{Archivos generados por el pipeline reproducible final}
+\begin{tabular}{>{\bfseries}p{6cm} p{8cm}}
 \toprule
 \tblhdr{Archivo} & \tblhdr{Contenido} \\
 \midrule
 \texttt{rooftop\_by\_municipio\_fuente.csv} & Conteos y áreas por municipio y fuente \\
 \rowcolor{grisfilas}
-\texttt{rooftop\_by\_municipio.csv} & Totales agregados por municipio \\
-\texttt{quality\_report.csv} & Métricas de calidad espacial \\
+\texttt{rooftop\_by\_municipio\_deduplicated.csv} & Resultado final consolidado sin duplicados \\
+\texttt{quality\_report.csv} & Métricas de calidad espacial y duplicación \\
 \rowcolor{grisfilas}
-\texttt{municipios\_rooftop.geojson} & Capa geoespacial enriquecida \\
-\texttt{mapa\_rooftop.png} & Mapa temático de edificaciones PDET \\
+\texttt{municipios\_rooftop\_deduplicated.geojson} & Capa geoespacial municipal enriquecida con resultados finales \\
+\texttt{mapa\_rooftop\_count.png} & Mapa de edificios sin duplicados por municipio \\
 \rowcolor{grisfilas}
-\texttt{run\_metadata.json} & Metadatos metodológicos y versiones \\
+\texttt{mapa\_rooftop\_area.png} & Mapa de área total de techos sin duplicados por municipio \\
+\texttt{run\_metadata.json} & Metadatos metodológicos, versiones y resumen global \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -959,21 +976,26 @@ El pipeline exporta automáticamente múltiples salidas para análisis posterior
 Como parte del análisis reproducible, el script genera automáticamente mapas coropléticos utilizando Matplotlib y GeoPandas.
 
 \begin{lstlisting}[language=Python, caption={Generación automática de mapa temático}]
-gdf_mun2.plot(
-    column="total_edificios",
+gdf_mun.plot(
+    column="total_edificios_sin_duplicados",
     ax=ax,
     legend=True,
     cmap="OrRd"
 )
 \end{lstlisting}
 
-La Figura~\ref{fig:mapa_rooftop} presenta el resultado final generado automáticamente por el pipeline.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.82\linewidth]{Imagenes/mapa_rooftop_count.png}
+    \caption{Mapa de edificios sin duplicados por municipio PDET. El resultado consolida Google Open Buildings y Microsoft Building Footprints evitando doble conteo por solapamiento espacial.}
+    \label{fig:mapa_rooftop_count}
+\end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.78\linewidth]{Imagenes/mapa_rooftop.png}
-    \caption{Mapa temático generado automáticamente por el pipeline reproducible. La visualización representa el total de edificaciones detectadas por municipio PDET tras la integración de datasets geoespaciales.}
-    \label{fig:mapa_rooftop}
+    \includegraphics[width=0.82\linewidth]{Imagenes/mapa_rooftop_area.png}
+    \caption{Mapa de área total de techos sin duplicados por municipio PDET, calculada en metros cuadrados mediante el sistema de referencia \texttt{EPSG:9377}.}
+    \label{fig:mapa_rooftop_area}
 \end{figure}
 
 \subsection{Metadatos y reproducibilidad}
@@ -996,18 +1018,20 @@ Este archivo almacena:
 
 Un extracto del archivo generado se muestra a continuación:
 
-\begin{lstlisting}[language=Python, caption={Metadatos de ejecución reproducible}]
+\begin{lstlisting}[language=Python, caption={Metadatos de ejecución reproducible final}]
 {
-  "analysis": "Rooftop Count and Area Estimation",
-  "parameters": {
-    "spatial_join_predicate": "within",
-    "area_crs_epsg": 9377
-  },
-  "inputs": {
-    "municipios_pdet": 164,
-    "google_geometrias_cargadas": 2617289,
-    "microsoft_geometrias_cargadas": 824605
-  }
+    "goal": "Estimate count and total rooftop area per PDET municipality.",
+    "area_calculation": "Areas calculated using projected CRS EPSG:9377.",
+    "deduplication": {
+        "threshold": 0.5,
+        "priority": "Google is kept as primary source; non-duplicate Microsoft buildings are added."
+    },
+    "global_summary": {
+        "google_original_buildings": 2686933,
+        "microsoft_original_buildings": 1537288,
+        "microsoft_duplicates_with_google": 764327,
+        "final_buildings_without_duplicates": 3459894
+    }
 }
 \end{lstlisting}
 
@@ -1018,11 +1042,11 @@ La ejecución del pipeline permitió consolidar información geoespacial reprodu
 Los principales resultados obtenidos incluyen:
 
 \begin{itemize}
-    \item Procesamiento de más de 3.4 millones de geometrías de edificios.
-    \item Integración automática entre Google Open Buildings y Microsoft Building Footprints.
-    \item Generación de estadísticas territoriales consolidadas.
-    \item Producción automática de capas geoespaciales compatibles con QGIS y MongoDB.
-    \item Validación espacial reproducible mediante métricas cuantitativas.
+    \item Procesamiento de 4,224,221 huellas de edificios provenientes de Google Open Buildings y Microsoft Building Footprints.
+    \item Identificación de 764,327 huellas de Microsoft duplicadas con Google mediante solapamiento espacial.
+    \item Consolidación de 3,459,894 edificios finales sin duplicados en los 170 municipios PDET.
+    \item Estimación de 282,081,655.68 m\textsuperscript{2} de área total de techos sin duplicados.
+    \item Producción automática de capas geoespaciales y reportes reproducibles para análisis posterior.
 \end{itemize}
 
 Estos resultados constituyen la base para futuros análisis de potencial fotovoltaico y planeación energética territorial dentro del marco PDET.
@@ -1034,8 +1058,10 @@ El análisis reproducible permitió identificar diferencias significativas en la
 A partir de los resultados agregados obtenidos en:
 
 \begin{center}
-\texttt{rooftop\_by\_municipio.csv}
+\texttt{rooftop\_by\_municipio\_deduplicated.csv}
 \end{center}
+
+El resultado oficial corresponde a la versión deduplicada del análisis. En esta versión, Google Open Buildings se conserva como fuente principal y Microsoft Building Footprints se utiliza como fuente complementaria. Las huellas de Microsoft que se solapan significativamente con Google son excluidas del conteo final para evitar doble contabilización de techos.
 
 se evidenció que los municipios con mayor concentración de edificaciones corresponden principalmente a territorios con mayor densidad urbana y actividad económica regional.
 

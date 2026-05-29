@@ -1,37 +1,42 @@
 {
-  "analysis": "Rooftop Count and Area Estimation",
-  "run_utc": "2026-05-20T00:11:25.521165+00:00",
-  "parameters": {
-    "mongo": "mongodb://localhost:27017/",
-    "db": "proyecto",
-    "out": "outputs",
-    "spatial_join_predicate": "within",
-    "area_crs_epsg": 9377
+  "script": "04_rooftop_analysis_deduplicated.py",
+  "run_utc": "2026-05-28T17:40:28.926733+00:00",
+  "mongo_uri": "mongodb://localhost:27017/",
+  "database": "proyecto",
+  "collections": {
+    "municipios_pdet": "territorios_pdet",
+    "google_buildings": "google_buildings",
+    "microsoft_buildings": "microsoft_buildings"
   },
-  "inputs": {
-    "municipios_pdet": 164,
-    "google_geometrias_cargadas": 2617289,
-    "microsoft_geometrias_cargadas": 824605
+  "methodology": {
+    "goal": "Estimate count and total rooftop area per PDET municipality.",
+    "municipality_assignment": "Buildings were previously assigned to PDET municipalities through spatial containment / centroid coverage during loading.",
+    "area_calculation": "Areas calculated using projected CRS EPSG:9377.",
+    "deduplication": {
+      "rule": "A Microsoft building is classified as duplicate when it spatially overlaps a Google building by intersection_area / min(area_google, area_microsoft) >= threshold.",
+      "threshold": 0.5,
+      "priority": "Google is kept as primary source; non-duplicate Microsoft buildings are added."
+    },
+    "outputs": [
+      "rooftop_by_municipio_fuente.csv",
+      "rooftop_by_municipio_deduplicated.csv",
+      "quality_report.csv",
+      "municipios_rooftop_deduplicated.geojson",
+      "mapa_rooftop_count.png",
+      "mapa_rooftop_area.png"
+    ]
   },
-  "outputs": {
-    "rooftop_by_municipio_fuente_csv": "outputs\\rooftop_by_municipio_fuente.csv",
-    "rooftop_by_municipio_csv": "outputs\\rooftop_by_municipio.csv",
-    "quality_report_csv": "outputs\\quality_report.csv",
-    "municipios_rooftop_geojson": "outputs\\municipios_rooftop.geojson",
-    "mapa_rooftop_png": "outputs\\mapa_rooftop.png"
-  },
-  "package_versions": {
-    "python_pymongo": "4.17.0",
-    "pandas": "3.0.3",
+  "software_versions": {
+    "python": "3.13.5",
+    "pandas": "2.3.1",
     "geopandas": "1.1.3",
     "shapely": "2.1.2",
-    "pyproj": "3.7.2"
+    "pymongo": "4.17.0"
   },
-  "methodology": [
-    "Carga de geometrías PDET y edificios desde MongoDB.",
-    "Cálculo de área en m2 en CRS métrico EPSG:9377.",
-    "Asignación de edificio a municipio con sjoin predicate='within'.",
-    "Agregación por fuente y total por municipio.",
-    "Exportación de tablas (CSV), capa geoespacial (GeoJSON) y mapa (PNG)."
-  ]
+  "global_summary": {
+    "google_original_buildings": 2686933,
+    "microsoft_original_buildings": 1537288,
+    "microsoft_duplicates_with_google": 764327,
+    "final_buildings_without_duplicates": 3459894
+  }
 }
