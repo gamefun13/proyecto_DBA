@@ -1,20 +1,28 @@
 """
 Carga archivos Microsoft Global ML Building Footprints (.geojson o .geojson.gz) → MongoDB
 ==========================================================================================
+
 Base de datos : proyecto
 Colección     : microsoft_buildings
 
-Instrucciones:
-    1. Poner los archivos .geojson (o .geojson.gz) en la misma carpeta
-    2. Tener MongoDB corriendo
-    3. Ejecutar: python cargar_microsoft_buildings.py
+Flujo:
+    1. Lee archivos .geojson o .geojson.gz de Microsoft Buildings.
+    2. Cruza cada edificio con municipios PDET.
+    3. Inserta solo edificios dentro de municipios PDET.
+    4. Crea índice geoespacial ANTES de insertar para que MongoDB rechace geometrías inválidas.
+    5. Evita que el script se caiga al final por polígonos inválidos.
+
+Ejecutar:
+    py microsoftB.py
 """
+
 import os
 import glob
 import gzip
 import json
 import time
 import logging
+
 import geopandas as gpd
 
 from shapely.geometry import (
@@ -26,7 +34,9 @@ from shapely.geometry import (
 )
 from shapely.geometry.polygon import orient
 from shapely.strtree import STRtree
+
 from pymongo import MongoClient, GEOSPHERE
+from pymongo.errors import BulkWriteError, OperationFailure
 
 try:
     from shapely.validation import make_valid
@@ -34,9 +44,10 @@ except Exception:
     make_valid = None
 
 
-# =========================
+# ============================================================
 # CONFIGURACIÓN
-# =========================
+# ============================================================
+
 MONGO_URI = "mongodb://localhost:27017/"
 DB_NAME = "proyecto"
 
@@ -44,12 +55,22 @@ COL_PDET = "territorios_pdet"
 COL_BUILDINGS = "microsoft_buildings"
 
 BATCH_SIZE = 20_000
+
+# True = borra microsoft_buildings antes de volver a cargar
 REINICIAR_COLECCION = True
 
+# Si estás en carpeta microsoft_geojson, normalmente pdet_final.geojson está un nivel arriba
+PDET_GEOJSON_PATHS = [
+    "pdet_final.geojson",
+    "../pdet_final.geojson",
+    "../Recursos/pdet_final.geojson"
+]
 
-# =========================
+
+# ============================================================
 # LOGGING
-# =========================
+# ============================================================
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
@@ -58,9 +79,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# =========================
-# UTILIDADES ARCHIVOS
-# =========================
+# ============================================================
+# UTILIDADES DE ARCHIVOS
+# ============================================================
+
 def abrir_archivo(path):
     if path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8")
@@ -72,9 +94,10 @@ def cargar_geojson(path):
         return json.load(f)
 
 
-# =========================
+# ============================================================
 # UTILIDADES GENERALES
-# =========================
+# ============================================================
+
 def convertir_float_seguro(valor):
     if valor in (-1, None, ""):
         return None
@@ -83,6 +106,18 @@ def convertir_float_seguro(valor):
         return float(valor)
     except Exception:
         return None
+
+
+def convertir_str_seguro(valor):
+    if valor is None:
+        return None
+
+    valor = str(valor).strip()
+
+    if valor == "":
+        return None
+
+    return valor
 
 
 def extraer_props(feature):
@@ -97,13 +132,25 @@ def extraer_props(feature):
     return height, confidence
 
 
-# =========================
+def obtener_propiedad(props, nombres):
+    for nombre in nombres:
+        if nombre in props:
+            valor = props.get(nombre)
+
+            if valor is not None and str(valor).strip() != "":
+                return valor
+
+    return None
+
+
+# ============================================================
 # LIMPIEZA GEOMÉTRICA
-# =========================
+# ============================================================
+
 def extraer_poligonos(geom):
     """
     Deja únicamente Polygon o MultiPolygon.
-    Si make_valid devuelve GeometryCollection, extrae solo las partes poligonales.
+    Si make_valid devuelve GeometryCollection, extrae solo partes poligonales.
     """
 
     if geom is None or geom.is_empty:
@@ -132,6 +179,7 @@ def extraer_poligonos(geom):
         for g in geom.geoms:
             if isinstance(g, Polygon) and not g.is_empty:
                 partes.append(g)
+
             elif isinstance(g, MultiPolygon):
                 partes.extend([
                     p for p in g.geoms
@@ -151,8 +199,7 @@ def extraer_poligonos(geom):
 
 def orientar_geometria(geom):
     """
-    Orienta los anillos de los polígonos.
-    Esto ayuda a que MongoDB acepte mejor el GeoJSON para índice 2dsphere.
+    Orienta anillos de polígonos.
     """
 
     if geom is None or geom.is_empty:
@@ -163,11 +210,18 @@ def orientar_geometria(geom):
             return orient(geom, sign=1.0)
 
         if isinstance(geom, MultiPolygon):
-            partes = [orient(g, sign=1.0) for g in geom.geoms if not g.is_empty]
+            partes = [
+                orient(g, sign=1.0)
+                for g in geom.geoms
+                if not g.is_empty
+            ]
+
             if not partes:
                 return None
+
             if len(partes) == 1:
                 return partes[0]
+
             return MultiPolygon(partes)
 
     except Exception:
@@ -178,8 +232,8 @@ def orientar_geometria(geom):
 
 def validar_geojson_mongo(geojson_geom):
     """
-    Validación extra antes de insertar.
-    Evita guardar geometrías que MongoDB no podrá indexar.
+    Validación básica antes de insertar.
+    MongoDB hará la validación geoespacial real gracias al índice 2dsphere.
     """
 
     if not isinstance(geojson_geom, dict):
@@ -194,14 +248,12 @@ def validar_geojson_mongo(geojson_geom):
     if not coords:
         return False
 
-    # Validación básica de coordenadas
     try:
         if tipo == "Polygon":
             for ring in coords:
                 if len(ring) < 4:
                     return False
 
-                # Primer y último punto deben ser iguales
                 if ring[0] != ring[-1]:
                     return False
 
@@ -212,7 +264,10 @@ def validar_geojson_mongo(geojson_geom):
                     lon = float(punto[0])
                     lat = float(punto[1])
 
-                    if lon < -180 or lon > 180 or lat < -90 or lat > 90:
+                    if lon < -180 or lon > 180:
+                        return False
+
+                    if lat < -90 or lat > 90:
                         return False
 
         elif tipo == "MultiPolygon":
@@ -231,7 +286,10 @@ def validar_geojson_mongo(geojson_geom):
                         lon = float(punto[0])
                         lat = float(punto[1])
 
-                        if lon < -180 or lon > 180 or lat < -90 or lat > 90:
+                        if lon < -180 or lon > 180:
+                            return False
+
+                        if lat < -90 or lat > 90:
                             return False
 
     except Exception:
@@ -242,102 +300,189 @@ def validar_geojson_mongo(geojson_geom):
 
 def limpiar_geometria_para_mongo(geom_raw):
     """
-    Convierte, repara y valida geometrías antes de insertarlas.
-    Evita errores de MongoDB como:
+    Convierte, repara y valida geometrías.
 
-    - Can't extract geo keys
-    - Loop is not valid
-    - Edges cross
+    Importante:
+    Aunque Shapely diga que una geometría es válida, MongoDB puede rechazarla
+    al indexarla como 2dsphere. Por eso el índice se crea ANTES de insertar.
     """
 
     if not geom_raw:
-        return None
+        return None, False
 
     try:
-        geom = shape(geom_raw)
+        geom_original = shape(geom_raw)
     except Exception:
-        return None
+        return None, False
+
+    if geom_original is None or geom_original.is_empty:
+        return None, False
+
+    geom = extraer_poligonos(geom_original)
 
     if geom is None or geom.is_empty:
-        return None
+        return None, False
 
-    geom = extraer_poligonos(geom)
+    reparada = False
 
-    if geom is None or geom.is_empty:
-        return None
-
-    # Reparación 1: make_valid si está disponible
     try:
         if make_valid is not None:
-            geom = make_valid(geom)
+            geom_validada = make_valid(geom)
+
+            if geom_validada is not None and not geom_validada.is_empty:
+                if not geom.equals_exact(geom_validada, 0.0000001):
+                    reparada = True
+
+                geom = geom_validada
+
     except Exception:
         pass
 
     geom = extraer_poligonos(geom)
 
     if geom is None or geom.is_empty:
-        return None
+        return None, reparada
 
-    # Reparación 2: buffer(0) SIEMPRE
-    # Esto ayuda con polígonos auto-intersectados.
     try:
-        geom = geom.buffer(0)
+        geom_buffer = geom.buffer(0)
+
+        if geom_buffer is not None and not geom_buffer.is_empty:
+            if not geom.equals_exact(geom_buffer, 0.0000001):
+                reparada = True
+
+            geom = geom_buffer
+
     except Exception:
-        return None
+        return None, reparada
 
     geom = extraer_poligonos(geom)
 
     if geom is None or geom.is_empty:
-        return None
+        return None, reparada
 
-    # Reparación 3: orientar anillos
     geom = orientar_geometria(geom)
 
     if geom is None or geom.is_empty:
-        return None
+        return None, reparada
 
-    # Validación final Shapely
-    if not geom.is_valid:
-        return None
+    try:
+        if not geom.is_valid:
+            return None, reparada
 
-    if geom.geom_type not in ["Polygon", "MultiPolygon"]:
-        return None
+        if geom.geom_type not in ["Polygon", "MultiPolygon"]:
+            return None, reparada
 
-    # Convertir a GeoJSON y volver a validar
+    except Exception:
+        return None, reparada
+
     geojson_geom = mapping(geom)
 
     if not validar_geojson_mongo(geojson_geom):
-        return None
+        return None, reparada
 
-    return geom
+    return geom, reparada
 
 
-# =========================
+# ============================================================
 # MUNICIPIOS PDET
-# =========================
-def cargar_municipios_pdet(db):
-    docs = list(
-        db[COL_PDET].find(
-            {},
-            {
-                "codigo_mgn": 1,
-                "nombre_municipio": 1,
-                "departamento": 1,
-                "subregion_pdet": 1,
-                "geometria_pdet": 1,
-            }
-        )
-    )
+# ============================================================
 
-    if not docs:
-        raise RuntimeError(
-            f"No hay documentos en '{COL_PDET}'. Ejecuta primero el script de municipios PDET."
-        )
+def obtener_geometria_pdet_doc(doc):
+    """
+    Soporta varios nombres posibles de campo geométrico.
+    """
+
+    if doc.get("geometria_pdet"):
+        return doc.get("geometria_pdet")
+
+    if doc.get("geometry"):
+        return doc.get("geometry")
+
+    if doc.get("geometria"):
+        return doc.get("geometria")
+
+    if doc.get("geometria_municipio"):
+        return doc.get("geometria_municipio")
+
+    if doc.get("geom"):
+        return doc.get("geom")
+
+    return None
+
+
+def construir_municipio_desde_props(props, geom):
+    return {
+        "codigo_mgn": convertir_str_seguro(
+            obtener_propiedad(
+                props,
+                [
+                    "codigo_mgn",
+                    "CODIGO_MGN",
+                    "COD_DANE_COMPLETO",
+                    "Código DANE Municipio",
+                    "Codigo DANE Municipio",
+                    "cod_mpio",
+                    "COD_MPIO",
+                    "mpio_cdpmp",
+                    "MPIO_CDPMP"
+                ]
+            )
+        ),
+        "nombre_municipio": convertir_str_seguro(
+            obtener_propiedad(
+                props,
+                [
+                    "nombre_municipio",
+                    "NOMBRE_MUNICIPIO",
+                    "municipio",
+                    "Municipio",
+                    "MPIO_CNMBR",
+                    "mpio_cnmbr",
+                    "NOM_MPIO",
+                    "nom_mpio"
+                ]
+            )
+        ),
+        "departamento": convertir_str_seguro(
+            obtener_propiedad(
+                props,
+                [
+                    "departamento",
+                    "Departamento",
+                    "NOMBRE_DEPARTAMENTO",
+                    "DPTO_CNMBR",
+                    "dpto_cnmbr",
+                    "NOM_DPTO",
+                    "nom_dpto"
+                ]
+            )
+        ),
+        "subregion_pdet": convertir_str_seguro(
+            obtener_propiedad(
+                props,
+                [
+                    "subregion_pdet",
+                    "Subregión PDET",
+                    "Subregion PDET",
+                    "SUBREGION",
+                    "subregion",
+                    "Subregion"
+                ]
+            )
+        ),
+        "geometry": geom
+    }
+
+
+def cargar_municipios_desde_mongo(db):
+    log.info("Cargando municipios PDET desde MongoDB...")
+
+    docs = list(db[COL_PDET].find({}))
 
     municipios = []
 
-    for d in docs:
-        geom_json = d.get("geometria_pdet")
+    for doc in docs:
+        geom_json = obtener_geometria_pdet_doc(doc)
 
         if not geom_json:
             continue
@@ -350,20 +495,76 @@ def cargar_municipios_pdet(db):
         if geom is None or geom.is_empty:
             continue
 
-        municipios.append(
-            {
-                "codigo_mgn": d.get("codigo_mgn"),
-                "nombre_municipio": d.get("nombre_municipio"),
-                "departamento": d.get("departamento"),
-                "subregion_pdet": d.get("subregion_pdet"),
-                "geometry": geom,
-            }
+        props = doc.get("properties", doc)
+
+        municipio = construir_municipio_desde_props(props, geom)
+
+        municipios.append(municipio)
+
+    return municipios
+
+
+def cargar_municipios_desde_geojson():
+    for path in PDET_GEOJSON_PATHS:
+        if not os.path.exists(path):
+            continue
+
+        log.warning(f"Cargando municipios PDET desde archivo local: {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            geojson = json.load(f)
+
+        features = geojson.get("features", [])
+
+        municipios = []
+
+        for feature in features:
+            geom_json = feature.get("geometry")
+            props = feature.get("properties", {}) or {}
+
+            if not geom_json:
+                continue
+
+            try:
+                geom = shape(geom_json)
+            except Exception:
+                continue
+
+            if geom is None or geom.is_empty:
+                continue
+
+            municipio = construir_municipio_desde_props(props, geom)
+
+            municipios.append(municipio)
+
+        if municipios:
+            return municipios
+
+    return []
+
+
+def cargar_municipios_pdet(db):
+    municipios = cargar_municipios_desde_mongo(db)
+
+    if not municipios:
+        log.warning(
+            f"No se pudieron leer municipios válidos desde '{COL_PDET}'. "
+            "Intentando cargar desde pdet_final.geojson..."
+        )
+
+        municipios = cargar_municipios_desde_geojson()
+
+    if not municipios:
+        raise RuntimeError(
+            f"No se pudieron cargar municipios PDET desde MongoDB ni desde {PDET_GEOJSON_PATHS}."
         )
 
     gdf = gpd.GeoDataFrame(municipios, crs="EPSG:4326")
 
     if len(gdf) == 0:
         raise RuntimeError("No se pudieron cargar geometrías PDET válidas.")
+
+    log.info(f"Municipios PDET cargados: {len(gdf)}")
 
     return gdf
 
@@ -372,25 +573,29 @@ def preparar_indice_espacial(gdf_pdet):
     geoms = list(gdf_pdet.geometry)
     tree = STRtree(geoms)
 
-    # Compatibilidad Shapely 1.x
-    geom_id_to_index = {id(geom): i for i, geom in enumerate(geoms)}
+    geom_id_to_index = {
+        id(geom): i
+        for i, geom in enumerate(geoms)
+    }
 
     return geoms, tree, geom_id_to_index
 
 
-def obtener_indices_candidatos(tree, geom_id_to_index, punto):
-    candidatos = tree.query(punto)
+def obtener_indices_candidatos(tree, geom_id_to_index, geometria_busqueda):
+    try:
+        candidatos = tree.query(geometria_busqueda)
+    except Exception:
+        return []
+
     indices = []
 
     for cand in candidatos:
-        # Shapely 2.x devuelve índices
         try:
             indices.append(int(cand))
             continue
         except Exception:
             pass
 
-        # Shapely 1.x devuelve geometrías
         idx = geom_id_to_index.get(id(cand))
 
         if idx is not None:
@@ -403,7 +608,13 @@ def buscar_municipio_para_geom(geom, gdf_pdet, geoms, tree, geom_id_to_index):
     if geom is None or geom.is_empty:
         return None
 
-    punto = geom.centroid
+    try:
+        punto = geom.representative_point()
+    except Exception:
+        try:
+            punto = geom.centroid
+        except Exception:
+            return None
 
     if punto is None or punto.is_empty:
         return None
@@ -411,31 +622,55 @@ def buscar_municipio_para_geom(geom, gdf_pdet, geoms, tree, geom_id_to_index):
     indices = obtener_indices_candidatos(tree, geom_id_to_index, punto)
 
     for idx in indices:
-        poligono = geoms[idx]
+        try:
+            poligono = geoms[idx]
 
-        if poligono.covers(punto):
-            fila = gdf_pdet.iloc[idx]
+            if poligono.covers(punto) or poligono.intersects(geom):
+                fila = gdf_pdet.iloc[idx]
 
-            return {
-                "codigo_mgn": fila["codigo_mgn"],
-                "nombre_municipio": fila["nombre_municipio"],
-                "departamento": fila.get("departamento"),
-                "subregion_pdet": fila.get("subregion_pdet"),
-            }
+                return {
+                    "codigo_mgn": fila["codigo_mgn"],
+                    "nombre_municipio": fila["nombre_municipio"],
+                    "departamento": fila.get("departamento"),
+                    "subregion_pdet": fila.get("subregion_pdet"),
+                }
+
+        except Exception:
+            continue
+
+    indices = obtener_indices_candidatos(tree, geom_id_to_index, geom)
+
+    for idx in indices:
+        try:
+            poligono = geoms[idx]
+
+            if poligono.intersects(geom):
+                fila = gdf_pdet.iloc[idx]
+
+                return {
+                    "codigo_mgn": fila["codigo_mgn"],
+                    "nombre_municipio": fila["nombre_municipio"],
+                    "departamento": fila.get("departamento"),
+                    "subregion_pdet": fila.get("subregion_pdet"),
+                }
+
+        except Exception:
+            continue
 
     return None
 
 
-# =========================
+# ============================================================
 # MONGODB
-# =========================
-def insertar_lote(col, batch):
-    if batch:
-        col.insert_many(batch, ordered=False)
-
+# ============================================================
 
 def crear_indices(col):
-    log.info("Creando índices finales...")
+    """
+    Crea índices en colección vacía.
+    Este punto es clave: el índice 2dsphere debe existir antes de insertar.
+    """
+
+    log.info("Creando índices...")
 
     col.create_index(
         [("geometria_edificio", GEOSPHERE)],
@@ -470,9 +705,58 @@ def crear_indices(col):
     log.info("Índices creados correctamente.")
 
 
-# =========================
+def preparar_coleccion(db):
+    if REINICIAR_COLECCION:
+        log.info(f"Eliminando colección '{COL_BUILDINGS}'...")
+        db[COL_BUILDINGS].drop()
+
+    col = db[COL_BUILDINGS]
+
+    try:
+        crear_indices(col)
+    except OperationFailure as e:
+        log.error(f"No se pudieron crear índices: {e}")
+        raise
+
+    return col
+
+
+def insertar_lote(col, batch):
+    """
+    Inserta un lote.
+    Si hay geometrías inválidas, MongoDB las rechaza por el índice 2dsphere,
+    pero el resto del lote puede entrar.
+    """
+
+    if not batch:
+        return 0, 0
+
+    try:
+        result = col.insert_many(batch, ordered=False)
+        return len(result.inserted_ids), 0
+
+    except BulkWriteError as e:
+        detalles = e.details or {}
+
+        insertados = detalles.get("nInserted", 0)
+        errores = len(detalles.get("writeErrors", []))
+
+        log.warning(
+            f"Lote parcialmente insertado: "
+            f"{insertados:,} insertados | {errores:,} rechazados por MongoDB"
+        )
+
+        return insertados, errores
+
+    except Exception as e:
+        log.warning(f"Lote rechazado completo: {e}")
+        return 0, len(batch)
+
+
+# ============================================================
 # PROCESAMIENTO
-# =========================
+# ============================================================
+
 def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
     nombre = os.path.basename(path)
 
@@ -484,16 +768,18 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
         geojson = cargar_geojson(path)
     except Exception as e:
         log.warning(f"Error leyendo {nombre}: {e}")
-        return 0, 0, 0
+        return 0, 0, 0, 0
 
     features = geojson.get("features", [])
 
     log.info(f"  {len(features):,} features en el archivo")
 
     batch = []
+
     insertados = 0
     omitidos = 0
     reparados = 0
+    rechazados_mongo = 0
     procesados = 0
 
     for feature in features:
@@ -506,25 +792,13 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
                 omitidos += 1
                 continue
 
-            try:
-                geom_original = shape(geom_raw)
-            except Exception:
-                omitidos += 1
-                continue
-
-            geom = limpiar_geometria_para_mongo(geom_raw)
+            geom, fue_reparada = limpiar_geometria_para_mongo(geom_raw)
 
             if geom is None:
                 omitidos += 1
                 continue
 
-            # Contador de reparados
-            try:
-                if (not geom_original.is_valid) or (
-                    not geom_original.equals_exact(geom, 0.0000001)
-                ):
-                    reparados += 1
-            except Exception:
+            if fue_reparada:
                 reparados += 1
 
             municipio = buscar_municipio_para_geom(
@@ -543,7 +817,6 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
 
             geojson_limpio = mapping(geom)
 
-            # Última validación antes de insertar
             if not validar_geojson_mongo(geojson_limpio):
                 omitidos += 1
                 continue
@@ -566,8 +839,12 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
             batch.append(doc)
 
             if len(batch) >= BATCH_SIZE:
-                insertar_lote(col, batch)
-                insertados += len(batch)
+                nuevos, rechazados = insertar_lote(col, batch)
+
+                insertados += nuevos
+                rechazados_mongo += rechazados
+                omitidos += rechazados
+
                 batch = []
 
         except Exception:
@@ -582,12 +859,16 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
                 f"insertados: {insertados:,} | "
                 f"omitidos: {omitidos:,} | "
                 f"reparados: {reparados:,} | "
+                f"rechazados MongoDB: {rechazados_mongo:,} | "
                 f"tiempo: {tiempo/60:.1f} min"
             )
 
     if batch:
-        insertar_lote(col, batch)
-        insertados += len(batch)
+        nuevos, rechazados = insertar_lote(col, batch)
+
+        insertados += nuevos
+        rechazados_mongo += rechazados
+        omitidos += rechazados
 
     tiempo_total = time.time() - t0
 
@@ -596,28 +877,84 @@ def procesar_archivo(path, col, gdf_pdet, geoms, tree, geom_id_to_index):
         f"{insertados:,} insertados | "
         f"{omitidos:,} omitidos | "
         f"{reparados:,} reparados | "
+        f"{rechazados_mongo:,} rechazados MongoDB | "
         f"{tiempo_total/60:.1f} min"
     )
 
-    return insertados, omitidos, reparados
+    return insertados, omitidos, reparados, rechazados_mongo
 
 
-# =========================
+# ============================================================
+# RESUMEN
+# ============================================================
+
+def mostrar_resumen(
+    col,
+    total_archivos,
+    total_insertados,
+    total_omitidos,
+    total_reparados,
+    total_rechazados_mongo,
+    tiempo_total
+):
+    log.info("─── Resumen final ───────────────────────────────────────")
+    log.info(f"Archivos procesados:            {total_archivos}")
+    log.info(f"Total edificios insertados:     {total_insertados:,}")
+    log.info(f"Total omitidos:                 {total_omitidos:,}")
+    log.info(f"Total reparados:                {total_reparados:,}")
+    log.info(f"Total rechazados por MongoDB:   {total_rechazados_mongo:,}")
+    log.info(f"Total en colección:             {col.count_documents({}):,}")
+    log.info(f"Tiempo total:                   {tiempo_total/60:.1f} min")
+
+    log.info("Top 10 municipios:")
+
+    pipeline = [
+        {
+            "$group": {
+                "_id": "$nombre_municipio",
+                "total": {"$sum": 1}
+            }
+        },
+        {
+            "$sort": {
+                "total": -1
+            }
+        },
+        {
+            "$limit": 10
+        }
+    ]
+
+    for r in col.aggregate(pipeline):
+        nombre = r.get("_id") or "SIN MUNICIPIO"
+        total = r.get("total", 0)
+        log.info(f"{total:10,}  {nombre}")
+
+    log.info("─────────────────────────────────────────────────────────")
+
+
+# ============================================================
 # MAIN
-# =========================
+# ============================================================
+
 def main():
-    log.info("=== SCRIPT 3: Carga Microsoft Buildings → MongoDB ===")
+    log.info("=== SCRIPT: Carga Microsoft Buildings → MongoDB ===")
 
     archivos = (
         glob.glob("*.geojson.gz") +
-        glob.glob("*.geojson") +
-        glob.glob("*.json")
+        glob.glob("*.geojson")
     )
+
+    # Evita procesar pdet_final.geojson si por accidente está en esta carpeta
+    archivos = [
+        a for a in archivos
+        if os.path.basename(a).lower() != "pdet_final.geojson"
+    ]
 
     archivos = sorted(list(set(archivos)))
 
     if not archivos:
-        log.error("No se encontraron archivos .geojson / .geojson.gz / .json.")
+        log.error("No se encontraron archivos .geojson / .geojson.gz de Microsoft.")
         return
 
     log.info(f"Archivos encontrados: {len(archivos)}")
@@ -628,27 +965,21 @@ def main():
     cliente = MongoClient(MONGO_URI)
     db = cliente[DB_NAME]
 
-    log.info("Cargando municipios PDET desde MongoDB...")
     gdf_pdet = cargar_municipios_pdet(db)
-
-    log.info(f"Municipios PDET cargados: {len(gdf_pdet)}")
 
     geoms, tree, geom_id_to_index = preparar_indice_espacial(gdf_pdet)
 
-    if REINICIAR_COLECCION:
-        log.info(f"Eliminando colección '{COL_BUILDINGS}'...")
-        db[COL_BUILDINGS].drop()
-
-    col = db[COL_BUILDINGS]
+    col = preparar_coleccion(db)
 
     total_insertados = 0
     total_omitidos = 0
     total_reparados = 0
+    total_rechazados_mongo = 0
 
     t_global = time.time()
 
     for archivo in archivos:
-        insertados, omitidos, reparados = procesar_archivo(
+        insertados, omitidos, reparados, rechazados_mongo = procesar_archivo(
             archivo,
             col,
             gdf_pdet,
@@ -660,44 +991,31 @@ def main():
         total_insertados += insertados
         total_omitidos += omitidos
         total_reparados += reparados
+        total_rechazados_mongo += rechazados_mongo
 
         log.info(
             f"Acumulado global: "
             f"{total_insertados:,} insertados | "
             f"{total_omitidos:,} omitidos | "
-            f"{total_reparados:,} reparados"
+            f"{total_reparados:,} reparados | "
+            f"{total_rechazados_mongo:,} rechazados MongoDB"
         )
 
-    crear_indices(col)
+    tiempo_total = time.time() - t_global
 
-    log.info("─── Resumen final ───────────────────────────────────────")
-    log.info(f"Archivos procesados:        {len(archivos)}")
-    log.info(f"Total edificios insertados: {total_insertados:,}")
-    log.info(f"Total omitidos:             {total_omitidos:,}")
-    log.info(f"Total reparados:            {total_reparados:,}")
-    log.info(f"Total en colección:         {col.count_documents({}):,}")
-    log.info(f"Tiempo total:               {(time.time() - t_global)/60:.1f} min")
-
-    log.info("Top 10 municipios:")
-
-    pipeline = [
-        {
-            "$group": {
-                "_id": "$nombre_municipio",
-                "total": {"$sum": 1}
-            }
-        },
-        {"$sort": {"total": -1}},
-        {"$limit": 10}
-    ]
-
-    for r in col.aggregate(pipeline):
-        log.info(f"  {r['total']:>8,}  {r['_id']}")
-
-    log.info("─────────────────────────────────────────────────────────")
+    mostrar_resumen(
+        col,
+        total_archivos=len(archivos),
+        total_insertados=total_insertados,
+        total_omitidos=total_omitidos,
+        total_reparados=total_reparados,
+        total_rechazados_mongo=total_rechazados_mongo,
+        tiempo_total=tiempo_total
+    )
 
     cliente.close()
-    log.info("=== Script 3 completado ✓ ===")
+
+    log.info("=== Script completado ✓ ===")
 
 
 if __name__ == "__main__":
