@@ -31,6 +31,8 @@
 \usepackage{titlesec}
 \usepackage{hyperref}
 \usepackage{listings}
+% Permitir codificación UTF-8 dentro de los entornos listings
+\lstset{inputencoding=utf8, extendedchars=true}
 \usepackage{enumitem}
 \usepackage{float}
 \usepackage{caption}
@@ -430,8 +432,8 @@ Los archivos fueron descargados directamente desde el portal de Google Open Buil
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{Imagenes/google.png}
-    \caption{Google open buildings}
-    \label{fig:mi_imagen}
+    \caption{Microsoft Building Footprints}
+    \label{fig:micro_imagen}
 \end{figure}
 
 Esto descarga unos archivos .csv.grz en los cuales estan los datos,en el script.py,se aplicó un filtro mínimo de confianza de \textbf{0.60} durante la carga, descartando detecciones con baja certeza de ser edificaciones reales.
@@ -526,12 +528,12 @@ Cada edificio, independientemente de la fuente, sigue el esquema unificado defin
 Se implementaron índices \texttt{2dsphere} sobre el campo \texttt{geometria\_edificio} en ambas colecciones de edificios, junto con índices auxiliares para acelerar consultas por fuente y municipio:
 
 \begin{lstlisting}[language=Python, caption={Creación de índices espaciales en MongoDB}]
-# Índice geoespacial 2dsphere (requerido para $geoWithin, $geoIntersects)
+# Indice geoespacial 2dsphere (requerido para geoWithin, geoIntersects)
 col.create_index(
     [("geometria_edificio", GEOSPHERE)],
     name="idx_geo_edificio"
 )
-# Índices auxiliares para agregaciones
+# Indices auxiliares para agregaciones
 col.create_index("fuente",     name="idx_fuente")
 col.create_index("codigo_mgn", name="idx_codigo_mgn")
 \end{lstlisting}
@@ -786,7 +788,7 @@ Total edificios cargados     & 2,686,933  & 1,537,288 \\
 \end{tabular}
 \end{table}
 
-% ══════════════════════════════════════════════════════════════════════════════
+
 
 % ══════════════════════════════════════════════════════════════════════════════
 \section{Análisis Reproducible de Rooftops y Generación de Resultados}
@@ -957,15 +959,15 @@ El pipeline exporta automáticamente múltiples salidas para análisis posterior
 \toprule
 \tblhdr{Archivo} & \tblhdr{Contenido} \\
 \midrule
-\texttt{rooftop\_by\_municipio\_fuente.csv} & Conteos y áreas por municipio y fuente \\
+\path{rooftop_by_municipio_fuente.csv} & Conteos y áreas por municipio y fuente \\
 \rowcolor{grisfilas}
-\texttt{rooftop\_by\_municipio\_deduplicated.csv} & Resultado final consolidado sin duplicados \\
-\texttt{quality\_report.csv} & Métricas de calidad espacial y duplicación \\
+\path{rooftop_by_municipio_deduplicated.csv} & Resultado final consolidado sin duplicados \\
+\path{quality_report.csv} & Métricas de calidad espacial y duplicación \\
 \rowcolor{grisfilas}
-\texttt{municipios\_rooftop\_deduplicated.geojson} & Capa geoespacial municipal enriquecida con resultados finales \\
-\texttt{mapa\_rooftop\_count.png} & Mapa de edificios sin duplicados por municipio \\
+\path{municipios_rooftop_deduplicated.geojson} & Capa geoespacial municipal enriquecida con resultados finales \\
+\path{mapa_rooftop_count.png} & Mapa de edificios sin duplicados por municipio \\
 \rowcolor{grisfilas}
-\texttt{mapa\_rooftop\_area.png} & Mapa de área total de techos sin duplicados por municipio \\
+\path{mapa_rooftop_area.png} & Mapa de área total de techos sin duplicados por municipio \\
 \texttt{run\_metadata.json} & Metadatos metodológicos, versiones y resumen global \\
 \bottomrule
 \end{tabular}
@@ -1058,7 +1060,7 @@ El análisis reproducible permitió identificar diferencias significativas en la
 A partir de los resultados agregados obtenidos en:
 
 \begin{center}
-\texttt{rooftop\_by\_municipio\_deduplicated.csv}
+\path{rooftop_by_municipio_deduplicated.csv}
 \end{center}
 
 El resultado oficial corresponde a la versión deduplicada del análisis. En esta versión, Google Open Buildings se conserva como fuente principal y Microsoft Building Footprints se utiliza como fuente complementaria. Las huellas de Microsoft que se solapan significativamente con Google son excluidas del conteo final para evitar doble contabilización de techos.
@@ -1089,4 +1091,86 @@ Los resultados muestran que municipios con alta concentración de edificaciones 
 
 Adicionalmente, el uso de métricas reproducibles y exportaciones geoespaciales en formatos abiertos facilita futuras etapas de modelamiento energético, simulación fotovoltaica y priorización territorial por parte de entidades gubernamentales como la UPME.
 
+
+
+% -------------------- Secciones movidas al final: Comparación, Recomendaciones, Conclusión --------------------
+\clearpage
+\section{Comparación de Fuentes de Datos de Edificaciones}
+
+Con el fin de seleccionar la fuente más adecuada para la estimación del potencial solar en municipios PDET, se realizó una comparación conceptual y cuantitativa entre los conjuntos de datos Google Open Buildings y Microsoft Building Footprints, orientada al objetivo específico del proyecto: estimar el potencial solar en municipios PDET.
+
+Google Open Buildings se caracteriza por ofrecer una cobertura amplia y uniforme obtenida mediante modelos de inteligencia artificial aplicados sobre imágenes satelitales. Esta fuente presenta alta disponibilidad en regiones en desarrollo y está diseñada para facilitar análisis a gran escala mediante formatos comprimidos optimizados para procesos masivos.
+
+Por otra parte, Microsoft Building Footprints se enfoca en la detección precisa de huellas de edificaciones utilizando imágenes de alta resolución y modelos de visión computacional. En zonas donde sus datos están disponibles, suele entregar geometrías más detalladas y representaciones de forma más precisa de los edificios.
+
+Para el caso específico de Colombia y de los territorios PDET, Google Open Buildings mostró una ventaja en cobertura territorial —en particular en áreas rurales—, lo que lo convierte en una fuente idónea para la identificación inicial de edificaciones a escala nacional. Microsoft Building Footprints, cuando está presente, aporta detecciones complementarias de mayor detalle geométrico que resultan útiles para validación y control de calidad.
+
+La comparación numérica se resume en la siguiente tabla, construida a partir de los resultados consolidados del proyecto:
+
+\begin{table}[H]
+\centering
+\caption{Comparación numérica entre Google Open Buildings y Microsoft Building Footprints}
+\begin{tabular}{p{6cm} r r}
+\toprule
+\tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
+\midrule
+Edificios cargados & 2,686,933 & 1,537,288 \\
+\rowcolor{grisfilas}
+Edificios duplicados entre fuentes & -- & 764,327 \\
+Edificios únicos aportados al resultado final & 2,686,933 & 772,961 \\
+\rowcolor{grisfilas}
+Total consolidado sin duplicados & \multicolumn{2}{r}{3,459,894} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+En términos de cobertura bruta, Google aportó aproximadamente 1.75 veces más edificaciones que Microsoft en el conjunto procesado. Sin embargo, Microsoft añadió más de 770 mil huellas únicas que enriquecen el resultado final y evidencian que ambas fuentes cumplen un rol complementario.
+
+En consecuencia, la estrategia recomendada por este proyecto es:
+
+Para interpretar mejor ese resultado, también conviene observar el peso relativo de cada fuente sobre el total procesado y sobre el resultado final consolidado:
+
+\begin{table}[H]
+\centering
+\caption{Participación porcentual de cada fuente en el proceso}
+\begin{tabular}{p{7cm} r r}
+\toprule
+\tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
+\midrule
+Participación sobre el total procesado & 63.6\% & 36.4\% \\
+\rowcolor{grisfilas}
+Participación sobre el resultado final sin duplicados & 77.7\% & 22.3\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+    \item Utilizar Google Open Buildings como fuente principal para estimaciones iniciales del potencial solar a escala nacional y para la identificación masiva de techos en municipios PDET.
+    \item Emplear Microsoft Building Footprints como fuente complementaria de validación y para enriquecer la muestra en municipios donde sus detecciones estén disponibles.
+    \item Mantener una política de deduplicación espacial (ver sección de metodología) en la que, ante solapamientos significativos, se priorice la geometría de Google para conservar continuidad en la base de referencia y se añadan huellas únicas de Microsoft.
+\end{itemize}
+
+\section{Recomendaciones para la UPME}
+
+A partir del análisis realizado y de la arquitectura geoespacial propuesta, se recomienda a la Unidad de Planeación Minero Energética (UPME):
+
+\begin{itemize}
+    \item Utilizar Google Open Buildings como fuente base para la identificación inicial de edificaciones dentro de municipios PDET debido a su amplia cobertura territorial.
+    \item Complementar el análisis mediante muestras de validación utilizando Microsoft Building Footprints cuando exista disponibilidad de datos para la misma región.
+    \item Integrar información de radiación solar, cobertura eléctrica y demanda energética para obtener estimaciones más precisas del potencial fotovoltaico a nivel municipal.
+    \item Mantener una infraestructura orientada a documentos (MongoDB) y formatos GeoJSON para facilitar futuras ampliaciones del sistema y permitir consultas espaciales eficientes sobre grandes volúmenes de información.
+    \item Priorizar municipios PDET con alta concentración de edificaciones y condiciones favorables de radiación solar para maximizar el impacto de futuras inversiones en generación distribuida.
+\end{itemize}
+
+\section{Conclusión}
+
+El proyecto diseñó e implementó una arquitectura NoSQL orientada al almacenamiento y procesamiento de información geoespacial para el análisis de potencial solar en territorios PDET. Mediante la integración del Marco Geoestadístico Nacional (MGN) y la generación de conjuntos de datos compatibles con MongoDB, se estableció una base sólida para realizar análisis espaciales a gran escala.
+
+La evaluación comparativa de las fuentes de datos indicó que Google Open Buildings constituye una alternativa adecuada para la caracterización inicial de edificaciones en municipios priorizados, gracias a su amplia cobertura territorial y disponibilidad en zonas rurales. Microsoft Building Footprints desempeña un rol complementario valioso como mecanismo de validación y control de calidad en las áreas donde está disponible.
+
+La solución propuesta proporciona una infraestructura escalable y reproducible que permite incorporar etapas posteriores de análisis, incluyendo la estimación de superficies útiles para la instalación de paneles solares, la generación de métricas energéticas y la priorización de territorios para la transición energética en Colombia.
+
+En este sentido, el trabajo desarrollado constituye una herramienta de apoyo para la toma de decisiones de la UPME y demuestra el potencial de las tecnologías NoSQL para abordar problemas de análisis geoespacial asociados al desarrollo sostenible y la planificación energética nacional.
+
+% -------------------- Fin de secciones movidas --------------------
 \end{document}
