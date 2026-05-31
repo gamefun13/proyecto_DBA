@@ -493,8 +493,8 @@ Los datos fueron almacenados en tres colecciones dentro de la base de datos \tex
 \midrule
 \texttt{territorios\_pdet}   & 170         & Límites municipales PDET \\
 \rowcolor{grisfilas}
-\texttt{google\_buildings}   & 2,686,933   & Huellas de edificios (Google) \\
-\texttt{microsoft\_buildings} & 1,537,288  & Huellas de edificios (Microsoft) \\
+\texttt{google\_buildings}   & 2,687,624   & Huellas de edificios (Google) \\
+\texttt{microsoft\_buildings} & 1,537,635  & Huellas de edificios (Microsoft) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -583,16 +583,19 @@ Tras completar la carga de ambos datasets, se realizó un análisis exploratorio
 \midrule
 Municipios PDET cargados & 170 \\
 \rowcolor{grisfilas}
-Edificios Google cargados & 2,686,933 \\
-Edificios Microsoft cargados después de limpieza geométrica & 1,537,288 \\
+Edificios Google cargados & 2.687.624 \\
+Edificios Microsoft cargados después de limpieza geométrica & 1.537.635 \\
 \rowcolor{grisfilas}
-Total de huellas procesadas en ambas fuentes & 4,224,221 \\
-Duplicados Microsoft-Google detectados & 764,327 \\
+Total de huellas procesadas en ambas fuentes & 4.225.259 \\
+Duplicados Microsoft-Google detectados & 764.492 \\
 \rowcolor{grisfilas}
-Edificios Microsoft únicos agregados & 772,961 \\
-Total final de edificios sin duplicados & 3,459,894 \\
+Edificios Microsoft únicos agregados & 773.143 \\
+Total final de edificios sin duplicados & \textbf{3.460.767} \\
 \rowcolor{grisfilas}
-Área total de techos sin duplicados (m\textsuperscript{2}) & 282,081,655.68 \\
+Área total de techos sin duplicados (m\textsuperscript{2}) & 
+\textbf{282.191.579,71} \\
+Área total de techos sin duplicados (ha) & 28.219,16 \\
+Área total de techos sin duplicados (km\textsuperscript{2}) & 282,19 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -622,13 +625,13 @@ Bajo esta regla, Google se conservó como fuente prioritaria y Microsoft se util
 \toprule
 \tblhdr{Categoría} & \tblhdr{Edificios} \\
 \midrule
-Google Open Buildings & 2,686,933 \\
+Google Open Buildings & 2.687.624 \\
 \rowcolor{grisfilas}
-Microsoft Building Footprints original & 1,537,288 \\
-Duplicados Microsoft-Google & 764,327 \\
+Microsoft Building Footprints original & 1.537.635 \\
+Duplicados Microsoft-Google & 764.492 \\
 \rowcolor{grisfilas}
-Microsoft únicos agregados & 772,961 \\
-Total final sin duplicados & 3,459,894 \\
+Microsoft únicos agregados & 773.143 \\
+\textbf{Total final sin duplicados} & \textbf{3.460.767} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -936,8 +939,9 @@ Posteriormente se realizaron agregaciones estadísticas para calcular:
 En la ejecución final, esta fórmula produjo:
 
 \[
-3,459,894 = 2,686,933 + (1,537,288 - 764,327)
+3.460.767 = 2.687.624 + (1.537.635 - 764.492)
 \]
+
 
 \begin{lstlisting}[language=Python, caption={Agregación por municipio (resultado final)}]
 df_municipio = df.groupby(
@@ -1026,70 +1030,190 @@ Un extracto del archivo generado se muestra a continuación:
     "area_calculation": "Areas calculated using projected CRS EPSG:9377.",
     "deduplication": {
         "threshold": 0.5,
-        "priority": "Google is kept as primary source; non-duplicate Microsoft buildings are added."
+        "priority": "Google is kept as primary source; non-duplicate Microsoft
+        buildings are added."
     },
     "global_summary": {
-        "google_original_buildings": 2686933,
-        "microsoft_original_buildings": 1537288,
-        "microsoft_duplicates_with_google": 764327,
-        "final_buildings_without_duplicates": 3459894
+        "google_original_buildings": 2687624,
+        "microsoft_original_buildings": 1537635,
+        "microsoft_duplicates_with_google": 764492,
+        "microsoft_unique_added": 773143,
+        "final_buildings_without_duplicates": 3460767,
+        "total_rooftop_area_m2": 282191579.71
     }
 }
 \end{lstlisting}
 
 \subsection{Resultados generales del análisis}
 
-La ejecución del pipeline permitió consolidar información geoespacial reproducible sobre el potencial de techos en municipios PDET.
+La ejecución del pipeline permitió consolidar información geoespacial 
+reproducible sobre el potencial de techos en municipios PDET.
 
 Los principales resultados obtenidos incluyen:
 
 \begin{itemize}
-    \item Procesamiento de 4,224,221 huellas de edificios provenientes de Google Open Buildings y Microsoft Building Footprints.
-    \item Identificación de 764,327 huellas de Microsoft duplicadas con Google mediante solapamiento espacial.
-    \item Consolidación de 3,459,894 edificios finales sin duplicados en los 170 municipios PDET.
-    \item Estimación de 282,081,655.68 m\textsuperscript{2} de área total de techos sin duplicados.
-    \item Producción automática de capas geoespaciales y reportes reproducibles para análisis posterior.
+    \item Procesamiento de \textbf{4.225.259} huellas de edificios 
+    provenientes de Google Open Buildings y Microsoft Building Footprints.
+    \item Identificación de \textbf{764.492} huellas de Microsoft duplicadas 
+    con Google mediante solapamiento espacial.
+    \item Consolidación de \textbf{3.460.767} edificios finales sin duplicados 
+    en los 170 municipios PDET.
+    \item Estimación de \textbf{282.191.579,71 m\textsuperscript{2}} de área 
+    total de techos sin duplicados (282,19 km\textsuperscript{2}).
+    \item Producción automática de capas geoespaciales y reportes reproducibles 
+    para análisis posterior.
 \end{itemize}
 
+Estos resultados constituyen la base para futuros análisis de potencial 
+fotovoltaico y planeación energética territorial dentro del marco PDET.
 Estos resultados constituyen la base para futuros análisis de potencial fotovoltaico y planeación energética territorial dentro del marco PDET.
 
 \subsection{Hallazgos territoriales del análisis de rooftops}
 
-El análisis reproducible permitió identificar diferencias significativas en la distribución territorial de edificaciones dentro de los municipios PDET.
+El análisis reproducible permitió identificar diferencias significativas en la 
+distribución territorial de edificaciones dentro de los municipios PDET. A partir 
+de los resultados agregados obtenidos en el archivo 
+\texttt{rooftop\_by\_municipio\_deduplicated.csv}, se consolidó el resultado oficial 
+de la versión deduplicada, en la cual Google Open Buildings se conserva como fuente 
+principal y Microsoft Building Footprints actúa como fuente complementaria. Las 
+huellas de Microsoft con solapamiento significativo respecto a Google fueron excluidas 
+del conteo final para evitar doble contabilización de techos.
 
-A partir de los resultados agregados obtenidos en:
+El resultado consolidado comprende \textbf{3.460.767 edificios} distribuidos en los 
+170 municipios PDET, con un área total de techos de \textbf{282.191.579,71 m²} 
+(282,19 km²), calculada geométricamente mediante proyección al sistema de referencia 
+métrico EPSG:9377. Cabe destacar que, dado que Microsoft Building Footprints no 
+provee el atributo \texttt{area\_in\_meters} para Colombia —reportando valores de 
+\texttt{-1} en los campos \texttt{height} y \texttt{confidence}—, el área de sus 
+huellas fue estimada directamente a partir de la geometría poligonal proyectada, 
+manteniendo consistencia metodológica con el tratamiento aplicado al dataset de Google.
 
-\begin{center}
-\path{rooftop_by_municipio_deduplicated.csv}
-\end{center}
+El Cuadro~\ref{tab:top20_edificios} presenta los 20 municipios con mayor número de 
+edificios detectados en el resultado consolidado sin duplicados, mientras que el 
+Cuadro~\ref{tab:top20_area} muestra los 20 municipios con mayor área total de techos.
 
-El resultado oficial corresponde a la versión deduplicada del análisis. En esta versión, Google Open Buildings se conserva como fuente principal y Microsoft Building Footprints se utiliza como fuente complementaria. Las huellas de Microsoft que se solapan significativamente con Google son excluidas del conteo final para evitar doble contabilización de techos.
+\begin{table}[H]
+\centering
+\caption{Top 20 municipios PDET por cantidad de edificios --- Resultado consolidado 
+sin duplicados (Google + Microsoft)}
+\label{tab:top20_edificios}
+\small
+\begin{tabular}{clrrrr}
+\toprule
+\textbf{\#} & \textbf{Municipio} & \textbf{Edificios} & \textbf{Área total (m²)} & 
+\textbf{Área (ha)} & \textbf{Área (km²)} \\
+\midrule
+1  & Santa Marta            & 208.108 & 17.841.495,91 & 1.784,15 & 17,84 \\
+2  & Valledupar             & 179.817 & 15.701.777,68 & 1.570,18 & 15,70 \\
+3  & Buenaventura           & 118.398 &  8.928.950,99 &   892,90 &  8,93 \\
+4  & Turbo                  &  89.360 &  6.748.184,75 &   674,82 &  6,75 \\
+5  & San Andrés de Tumaco   &  75.652 &  5.965.839,22 &   596,58 &  5,97 \\
+6  & Florencia              &  66.892 &  7.941.304,45 &   794,13 &  7,94 \\
+7  & El Tambo               &  62.008 &  4.062.485,54 &   406,25 &  4,06 \\
+8  & Tibú                   &  54.977 &  4.236.220,06 &   423,62 &  4,24 \\
+9  & Santander de Quilichao &  50.580 &  5.220.381,38 &   522,04 &  5,22 \\
+10 & Arauquita              &  49.748 &  4.148.534,76 &   414,85 &  4,15 \\
+11 & Ciénaga                &  49.248 &  4.443.834,55 &   444,38 &  4,44 \\
+12 & Cajibío                &  47.590 &  2.940.102,91 &   294,01 &  2,94 \\
+13 & Tame                   &  47.543 &  4.199.296,54 &   419,93 &  4,20 \\
+14 & El Carmen de Bolívar   &  45.809 &  2.923.709,67 &   292,37 &  2,92 \\
+15 & Tierralta              &  45.262 &  3.209.412,14 &   320,94 &  3,21 \\
+16 & San José del Guaviare  &  41.264 &  3.852.209,86 &   385,22 &  3,85 \\
+17 & Puerto Asís            &  37.583 &  3.428.869,10 &   342,89 &  3,43 \\
+18 & Apartadó               &  36.883 &  3.630.475,29 &   363,05 &  3,63 \\
+19 & San Vicente del Caguán &  36.855 &  4.468.540,10 &   446,85 &  4,47 \\
+20 & Necoclí                &  36.850 &  2.602.735,74 &   260,27 &  2,60 \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize Fuente: elaboración propia a partir de Google Open 
+Buildings v3 y Microsoft Building Footprints.} \\
+\multicolumn{6}{l}{\footnotesize Áreas calculadas en EPSG:9377. Deduplicación 
+espacial con umbral IoU $\geq$ 0,50.} \\
+\end{tabular}
+\end{table}
 
-se evidenció que los municipios con mayor concentración de edificaciones corresponden principalmente a territorios con mayor densidad urbana y actividad económica regional.
+\begin{table}[H]
+\centering
+\caption{Top 20 municipios PDET por área total de techos --- Resultado consolidado 
+sin duplicados (Google + Microsoft)}
+\label{tab:top20_area}
+\small
+\begin{tabular}{clrrrr}
+\toprule
+\textbf{\#} & \textbf{Municipio} & \textbf{Área total (m²)} & \textbf{Área (ha)} & 
+\textbf{Área (km²)} & \textbf{Edificios} \\
+\midrule
+1  & Santa Marta            & 17.841.495,91 & 1.784,15 & 17,84 & 208.108 \\
+2  & Valledupar             & 15.701.777,68 & 1.570,18 & 15,70 & 179.817 \\
+3  & Buenaventura           &  8.928.950,99 &   892,90 &  8,93 & 118.398 \\
+4  & Florencia              &  7.941.304,45 &   794,13 &  7,94 &  66.892 \\
+5  & Turbo                  &  6.748.184,75 &   674,82 &  6,75 &  89.360 \\
+6  & San Andrés de Tumaco   &  5.965.839,22 &   596,58 &  5,97 &  75.652 \\
+7  & Santander de Quilichao &  5.220.381,38 &   522,04 &  5,22 &  50.580 \\
+8  & San Vicente del Caguán &  4.468.540,10 &   446,85 &  4,47 &  36.855 \\
+9  & Ciénaga                &  4.443.834,55 &   444,38 &  4,44 &  49.248 \\
+10 & Tibú                   &  4.236.220,06 &   423,62 &  4,24 &  54.977 \\
+11 & Tame                   &  4.199.296,54 &   419,93 &  4,20 &  47.543 \\
+12 & Arauquita              &  4.148.534,76 &   414,85 &  4,15 &  49.748 \\
+13 & El Tambo               &  4.062.485,54 &   406,25 &  4,06 &  62.008 \\
+14 & San José del Guaviare  &  3.852.209,86 &   385,22 &  3,85 &  41.264 \\
+15 & Apartadó               &  3.630.475,29 &   363,05 &  3,63 &  36.883 \\
+16 & Puerto Asís            &  3.428.869,10 &   342,89 &  3,43 &  37.583 \\
+17 & Tierralta              &  3.209.412,14 &   320,94 &  3,21 &  45.262 \\
+18 & Montelíbano            &  3.140.424,82 &   314,04 &  3,14 &  36.211 \\
+19 & Caucasia               &  2.973.872,32 &   297,39 &  2,97 &  33.540 \\
+20 & Cajibío                &  2.940.102,91 &   294,01 &  2,94 &  47.590 \\
+\bottomrule
+\multicolumn{6}{l}{\footnotesize Fuente: elaboración propia a partir de Google Open 
+Buildings v3 y Microsoft Building Footprints.} \\
+\multicolumn{6}{l}{\footnotesize Áreas calculadas en EPSG:9377. Deduplicación 
+espacial con umbral IoU $\geq$ 0,50.} \\
+\end{tabular}
+\end{table}
 
 Entre los principales hallazgos obtenidos se destacan:
 
 \begin{itemize}
+    \item \textbf{Alta concentración de edificaciones en zonas urbanas consolidadas}: 
+    Santa Marta (208.108 edificios) y Valledupar (179.817 edificios) lideran el 
+    ranking consolidado, concentrando conjuntamente el 11,2\% del total de 
+    edificaciones detectadas en los 170 municipios PDET.
 
-    \item \textbf{Alta concentración de edificaciones en zonas urbanas consolidadas}: municipios como Santa Marta, Valledupar y Buenaventura presentaron los mayores conteos de edificaciones detectadas dentro de territorios PDET.
+    \item \textbf{Divergencia entre cantidad y área}: Florencia ocupa el puesto 6 
+    por número de edificios pero asciende al puesto 4 por área total de techos 
+    (7.941.304,45 m²), lo que sugiere una mayor proporción de construcciones de 
+    gran superficie, potencialmente industriales o institucionales, con alto 
+    potencial fotovoltaico por unidad de edificación.
 
-    \item \textbf{Distribución desigual del área total de techos}: aunque algunos municipios presentan menos edificaciones, el área promedio de techos es significativamente mayor, indicando presencia de construcciones de gran tamaño o baja densidad urbana.
+    \item \textbf{Distribución desigual del área total de techos}: los dos primeros 
+    municipios por área (Santa Marta y Valledupar) concentran más de 33,5 km² de 
+    superficie de techos, equivalente al 11,9\% del área total estimada para el 
+    conjunto PDET.
 
-    \item \textbf{Cobertura territorial heterogénea}: los municipios ubicados en regiones selváticas del Pacífico y Amazonía presentaron menores densidades de detección, lo cual coincide con limitaciones de visibilidad satelital y dispersión poblacional.
+    \item \textbf{Cobertura territorial heterogénea}: municipios ubicados en 
+    regiones selváticas del Pacífico y la Amazonía presentaron menores densidades 
+    de detección, coincidiendo con limitaciones de visibilidad satelital y 
+    dispersión poblacional características de estas zonas.
 
-    \item \textbf{Mayor cobertura del dataset de Google}: Google Open Buildings logró detectar una cantidad considerablemente superior de edificaciones frente a Microsoft Building Footprints en la mayoría de municipios analizados.
+    \item \textbf{Mayor cobertura del dataset de Google}: Google Open Buildings 
+    detectó aproximadamente 1,75 veces más edificaciones que Microsoft en el 
+    conjunto procesado, aportando el 77,7\% del resultado final consolidado.
 
-    \item \textbf{Consistencia espacial}: la tasa de asignación territorial obtenida mediante operaciones espaciales \texttt{within} confirmó una alta coherencia entre las geometrías de edificios y los límites municipales PDET.
-
+    \item \textbf{Consistencia espacial}: la tasa de asignación territorial 
+    mediante operaciones espaciales \texttt{within} confirmó alta coherencia entre 
+    las geometrías de edificios y los límites municipales PDET, con 164 geometrías 
+    válidas sobre 164 procesadas (tasa de error: 0\%).
 \end{itemize}
 
-\vspace{0.3cm}
+El análisis de áreas acumuladas permite estimar que los 170 municipios PDET 
+disponen de \textbf{282,19 km²} de superficie de techos potencialmente aprovechable 
+para generación fotovoltaica distribuida. Municipios con alta concentración de 
+edificaciones y condiciones favorables de radiación solar —como Santa Marta, 
+Valledupar y Florencia— se convierten en candidatos estratégicos prioritarios para 
+iniciativas de transición energética en el marco PDET.
 
-El análisis de áreas acumuladas permitió además estimar de manera preliminar el potencial de superficie disponible para futuras instalaciones fotovoltaicas distribuidas.
-
-Los resultados muestran que municipios con alta concentración de edificaciones también presentan una elevada disponibilidad de área útil de techos, convirtiéndose en candidatos estratégicos para iniciativas de transición energética y generación solar descentralizada.
-
-Adicionalmente, el uso de métricas reproducibles y exportaciones geoespaciales en formatos abiertos facilita futuras etapas de modelamiento energético, simulación fotovoltaica y priorización territorial por parte de entidades gubernamentales como la UPME.
+Adicionalmente, el uso de métricas reproducibles y exportaciones geoespaciales en 
+formatos abiertos (GeoJSON, CSV) facilita futuras etapas de modelamiento energético, 
+simulación fotovoltaica y priorización territorial por parte de la UPME.
 
 
 
@@ -1109,17 +1233,18 @@ La comparación numérica se resume en la siguiente tabla, construida a partir d
 
 \begin{table}[H]
 \centering
-\caption{Comparación numérica entre Google Open Buildings y Microsoft Building Footprints}
+\caption{Comparación numérica entre Google Open Buildings y 
+Microsoft Building Footprints}
 \begin{tabular}{p{6cm} r r}
 \toprule
 \tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
 \midrule
-Edificios cargados & 2,686,933 & 1,537,288 \\
+Edificios cargados & 2.687.624 & 1.537.635 \\
 \rowcolor{grisfilas}
-Edificios duplicados entre fuentes & -- & 764,327 \\
-Edificios únicos aportados al resultado final & 2,686,933 & 772,961 \\
+Edificios duplicados entre fuentes & -- & 764.492 \\
+Edificios únicos aportados al resultado final & 2.687.624 & 773.143 \\
 \rowcolor{grisfilas}
-Total consolidado sin duplicados & \multicolumn{2}{r}{3,459,894} \\
+Total consolidado sin duplicados & \multicolumn{2}{r}{\textbf{3.460.767}} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1137,9 +1262,11 @@ Para interpretar mejor ese resultado, también conviene observar el peso relativ
 \toprule
 \tblhdr{Métrica} & \tblhdr{Google} & \tblhdr{Microsoft} \\
 \midrule
-Participación sobre el total procesado & 63.6\% & 36.4\% \\
+Participación sobre el total procesado 
+(4.225.259 huellas) & 63,6\% & 36,4\% \\
 \rowcolor{grisfilas}
-Participación sobre el resultado final sin duplicados & 77.7\% & 22.3\% \\
+Participación sobre el resultado final sin duplicados 
+(3.460.767 edificios) & 77,7\% & 22,3\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1152,25 +1279,104 @@ Participación sobre el resultado final sin duplicados & 77.7\% & 22.3\% \\
 
 \section{Recomendaciones para la UPME}
 
-A partir del análisis realizado y de la arquitectura geoespacial propuesta, se recomienda a la Unidad de Planeación Minero Energética (UPME):
+A partir del análisis geoespacial realizado sobre los 170 municipios PDET, 
+se presentan las siguientes recomendaciones técnicas a la Unidad de 
+Planeación Minero Energética (UPME):
 
-\begin{itemize}
-    \item Utilizar Google Open Buildings como fuente base para la identificación inicial de edificaciones dentro de municipios PDET debido a su amplia cobertura territorial.
-    \item Complementar el análisis mediante muestras de validación utilizando Microsoft Building Footprints cuando exista disponibilidad de datos para la misma región.
-    \item Integrar información de radiación solar, cobertura eléctrica y demanda energética para obtener estimaciones más precisas del potencial fotovoltaico a nivel municipal.
-    \item Mantener una infraestructura orientada a documentos (MongoDB) y formatos GeoJSON para facilitar futuras ampliaciones del sistema y permitir consultas espaciales eficientes sobre grandes volúmenes de información.
-    \item Priorizar municipios PDET con alta concentración de edificaciones y condiciones favorables de radiación solar para maximizar el impacto de futuras inversiones en generación distribuida.
-\end{itemize}
+\begin{enumerate}
+
+    \item \textbf{Priorizar Santa Marta, Valledupar y Florencia como municipios 
+    piloto para proyectos fotovoltaicos distribuidos.} Estos tres municipios 
+    concentran respectivamente 17,84 km², 15,70 km² y 7,94 km² de área total 
+    de techos, representando en conjunto el 14,7\% de los 282,19 km² estimados 
+    para el total de territorios PDET. Su alta densidad de edificaciones y 
+    consolidación urbana los convierten en los candidatos con mayor viabilidad 
+    técnica para una fase piloto de generación solar descentralizada.
+
+    \item \textbf{Adoptar Google Open Buildings como fuente base para 
+    identificación masiva de techos en territorios PDET.} En el análisis 
+    realizado, Google detectó 2.687.624 edificios frente a 1.537.635 de 
+    Microsoft, aportando el 77,7\% del resultado final consolidado de 
+    3.460.767 edificios. Su cobertura es especialmente superior en municipios 
+    rurales y zonas de difícil acceso, donde Microsoft presentó subdetección 
+    significativa, como se evidenció en Valledupar (ratio Google/Microsoft 
+    de 11,45x) y Tierralta (10,29x).
+
+    \item \textbf{Complementar el análisis con Microsoft Building Footprints 
+    para municipios con baja cobertura de Google.} En 36 de los 168 municipios 
+    con cobertura en ambas fuentes, Microsoft superó a Google en número de 
+    detecciones. Microsoft aportó 773.143 edificios únicos al resultado final, 
+    equivalentes al 22,3\% del consolidado. Ignorar esta fuente implicaría 
+    subestimar el potencial solar en municipios como Ataco, López y Rioblanco, 
+    donde Google presenta menor cobertura.
+
+    \item \textbf{Incorporar datos de radiación solar y demanda energética 
+    para una estimación precisa del potencial fotovoltaico.} Los 282,19 km² 
+    de área total de techos estimados representan la superficie máxima 
+    disponible, pero la superficie técnicamente aprovechable depende de 
+    factores como irradiación horizontal global (GHI), orientación e 
+    inclinación de techos, y demanda energética local. Se recomienda cruzar 
+    los resultados obtenidos con el Atlas de Radiación Solar del IDEAM para 
+    obtener estimaciones de generación en kWh por municipio.
+
+    \item \textbf{Mantener y escalar la infraestructura NoSQL geoespacial 
+    implementada.} La arquitectura MongoDB con índices \texttt{2dsphere} 
+    demostró capacidad para procesar 4.225.259 huellas de edificios 
+    distribuidas en 170 municipios, con inserción optimizada por lotes de 
+    20.000 documentos e identificación de 764.492 duplicados mediante 
+    solapamiento espacial. Esta infraestructura es escalable al conjunto 
+    completo de municipios colombianos (1.122 según el MGN 2025) sin 
+    cambios arquitectónicos, lo que la convierte en una plataforma 
+    sostenible para futuras etapas del análisis energético territorial.
+
+\end{enumerate}
+
 
 \section{Conclusión}
 
-El proyecto diseñó e implementó una arquitectura NoSQL orientada al almacenamiento y procesamiento de información geoespacial para el análisis de potencial solar en territorios PDET. Mediante la integración del Marco Geoestadístico Nacional (MGN) y la generación de conjuntos de datos compatibles con MongoDB, se estableció una base sólida para realizar análisis espaciales a gran escala.
+Este proyecto diseñó e implementó una arquitectura NoSQL geoespacial 
+orientada al análisis del potencial solar en techos de edificaciones 
+dentro de los territorios priorizados por los Programas de Desarrollo 
+con Enfoque Territorial (PDET) en Colombia. A lo largo de cinco etapas 
+—diseño del esquema, integración territorial, adquisición de datos, 
+carga en MongoDB y análisis reproducible— se construyó un pipeline 
+completo, documentado y reproducible que responde directamente al 
+objetivo planteado por la UPME.
 
-La evaluación comparativa de las fuentes de datos indicó que Google Open Buildings constituye una alternativa adecuada para la caracterización inicial de edificaciones en municipios priorizados, gracias a su amplia cobertura territorial y disponibilidad en zonas rurales. Microsoft Building Footprints desempeña un rol complementario valioso como mecanismo de validación y control de calidad en las áreas donde está disponible.
+El resultado central del proyecto es la estimación de \textbf{3.460.767 
+edificios} y \textbf{282,19 km² de área total de techos} distribuidos 
+en los \textbf{170 municipios PDET}, obtenida mediante la consolidación 
+deduplicada de Google Open Buildings (2.687.624 edificios) y Microsoft 
+Building Footprints (1.537.635 edificios), con identificación y exclusión 
+de 764.492 huellas duplicadas mediante una regla de solapamiento espacial 
+con umbral IoU $\geq$ 0,50.
 
-La solución propuesta proporciona una infraestructura escalable y reproducible que permite incorporar etapas posteriores de análisis, incluyendo la estimación de superficies útiles para la instalación de paneles solares, la generación de métricas energéticas y la priorización de territorios para la transición energética en Colombia.
+La evaluación comparativa de fuentes evidenció que Google Open Buildings 
+constituye la fuente más adecuada para caracterizaciones a escala nacional, 
+aportando el 77,7\% del resultado final consolidado y mostrando cobertura 
+superior en zonas rurales y de difícil acceso. Microsoft Building Footprints, 
+por su parte, cumplió un rol complementario estratégico al agregar 773.143 
+edificios únicos no detectados por Google, enriqueciendo el análisis en 
+municipios con subdetección de la fuente principal.
 
-En este sentido, el trabajo desarrollado constituye una herramienta de apoyo para la toma de decisiones de la UPME y demuestra el potencial de las tecnologías NoSQL para abordar problemas de análisis geoespacial asociados al desarrollo sostenible y la planificación energética nacional.
+Desde el punto de vista metodológico, la decisión de calcular las áreas 
+de techos de Microsoft geométricamente —mediante proyección al sistema de 
+referencia EPSG:9377— garantizó consistencia en la estimación de superficies 
+ante la ausencia del atributo \texttt{area\_in\_meters} en los archivos 
+distribuidos para Colombia. Esta decisión, junto con la implementación de 
+índices \texttt{2dsphere} y la escritura por lotes de 20.000 documentos, 
+permitió procesar eficientemente más de 4,2 millones de huellas dentro de 
+una arquitectura MongoDB escalable.
+
+Los municipios de Santa Marta, Valledupar y Florencia se destacan como 
+candidatos estratégicos prioritarios, concentrando conjuntamente más de 
+41,67 km² de área útil de techos. Estos resultados, exportados en formatos 
+abiertos (GeoJSON, CSV) y acompañados de mapas coropléticos reproducibles, 
+constituyen una base sólida para que la UPME avance hacia etapas de 
+modelamiento fotovoltaico, simulación energética y priorización territorial 
+en el marco de la transición energética colombiana.
+
+
 
 % -------------------- Fin de secciones movidas --------------------
 \end{document}
